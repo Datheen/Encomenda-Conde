@@ -1,0 +1,61 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+.trash-button svg {
+	transition: transform 180ms ease;
+}
+
+.trash-button:hover svg {
+	transform: rotate(-12deg) scale(1.15);
+}
+
+.trash-button:active svg {
+	transform: rotate(8deg) scale(0.92);
+}
+
+:root,
+:root[data-theme="brioches-light"] {
+	--color-primary: #dc2626;
+	--color-primary-content: #ffffff;
+	--color-secondary: #991b1b;
+	--color-secondary-content: #ffffff;
+}
+
+:root[data-theme="brioches-dark"] {
+	color-scheme: dark;
+	--color-base-100: #1f2937;
+	--color-base-200: #111827;
+	--color-base-300: #374151;
+	--color-base-content: #f9fafb;
+	--color-primary: #ef4444;
+	--color-primary-content: #ffffff;
+	--color-secondary: #f87171;
+	--color-secondary-content: #1f2937;
+}
+
+@page {
+	size: A4 portrait;
+	margin: 0;
+}
+
+@media print {
+	html,
+	body {
+		width: 210mm;
+		min-height: 297mm;
+		background: #fff;
+	}
+
+	body {
+		margin: 0;
+	}
+
+	.print-area {
+		display: block;
+	}
+
+	.a4-sheet {
+		break-inside: avoid;
+		page-break-inside: avoid;
+	}
+}

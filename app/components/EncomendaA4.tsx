@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Document, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
 
 export type EncomendaA4Item = {
@@ -19,6 +19,8 @@ export type EncomendaA4Props = {
   observacao?: string;
   itens: EncomendaA4Item[];
   onSalvar?: () => Promise<boolean>;
+  dataSolicitada?: string;
+  baixarAutomaticamente?: boolean;
 };
 
 const pdfStyles = StyleSheet.create({
@@ -178,21 +180,24 @@ export default function EncomendaA4({
   observacao,
   itens,
   onSalvar,
+  dataSolicitada: dataSolicitadaProp,
+  baixarAutomaticamente = false,
 }: EncomendaA4Props) {
   const folhaRef = useRef<HTMLElement>(null);
+  const autoDownloadStarted = useRef(false);
   const [salvando, setSalvando] = useState(false);
   const [erroPdf, setErroPdf] = useState("");
-  const [dataSolicitada, setDataSolicitada] = useState("");
+  const [dataSolicitada, setDataSolicitada] = useState(dataSolicitadaProp || "");
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setDataSolicitada(new Date().toISOString().slice(0, 10));
+      setDataSolicitada(dataSolicitadaProp || new Date().toISOString().slice(0, 10));
     }, 0);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [dataSolicitadaProp]);
 
-  async function salvarEmPdf() {
+  const salvarEmPdf = useCallback(async () => {
     if (!folhaRef.current || salvando) return;
 
     setSalvando(true);
@@ -243,7 +248,14 @@ export default function EncomendaA4({
     } finally {
       setSalvando(false);
     }
-  }
+  }, [clienteLanche, dataEntrega, dataSolicitada, itens, observacao, onSalvar, salvando, solicitante]);
+
+  useEffect(() => {
+    if (baixarAutomaticamente && dataSolicitada && !autoDownloadStarted.current) {
+      autoDownloadStarted.current = true;
+      void salvarEmPdf();
+    }
+  }, [baixarAutomaticamente, dataSolicitada, salvarEmPdf]);
 
   return (
     <section className="print-area flex flex-col items-center gap-4">

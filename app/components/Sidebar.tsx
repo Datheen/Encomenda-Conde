@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { FormEvent, useEffect, useState } from "react";
-import EncomendaA4 from "./EncomendaA4";
+import EncomendaA4, { EncomendaA4Item } from "./EncomendaA4";
 import { supabase } from "../../lib/supabase";
 
 type BriocheItem = {
@@ -23,6 +23,11 @@ type HistoricoPedido = {
     solicitante: string;
     observacao: string | null;
     created_at: string;
+};
+
+type Reimpressao = {
+    pedido: HistoricoPedido;
+    itens: EncomendaA4Item[];
 };
 
 const cores = ["Tradicional", "Vermelho", "Verde", "Azul", "Amarelo"];
@@ -53,6 +58,7 @@ export default function Sidebar() {
     const [temaEscuro, setTemaEscuro] = useState(false);
     const [salvamentoAutomatico, setSalvamentoAutomatico] = useState(true);
     const [corAcento, setCorAcento] = useState("#dc2626");
+    const [reimpressao, setReimpressao] = useState<Reimpressao | null>(null);
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -216,6 +222,31 @@ export default function Sidebar() {
 
         setHistorico((pedidosAtuais) => pedidosAtuais.filter((pedidoAtual) => pedidoAtual.id !== pedido.id));
         setMensagem("Encomenda apagada com sucesso.");
+    }
+
+    async function reimprimirPedido(pedido: HistoricoPedido) {
+        setMensagem("");
+        const { data, error } = await supabase
+            .from("itens_encomenda")
+            .select("codigo, quantidade, unidade, gergelim, aro, cor")
+            .eq("encomenda_id", pedido.id);
+
+        if (error) {
+            setMensagem(`Não foi possível recuperar os itens da encomenda: ${error.message}`);
+            return;
+        }
+
+        setReimpressao({
+            pedido,
+            itens: (data || []).map((item) => ({
+                codigo: item.codigo,
+                quantidade: item.quantidade,
+                unidade: item.unidade,
+                gergelim: item.gergelim,
+                aro: item.aro,
+                cor: item.cor,
+            })),
+        });
     }
 
     return (
@@ -385,7 +416,7 @@ export default function Sidebar() {
                                 ) : (
                                     <table className="table">
                                         <thead><tr><th>Cliente / Lanche</th><th>Entrega</th><th>Solicitante</th><th>Criado em</th><th>Ações</th></tr></thead>
-                                        <tbody>{historico.map((pedido) => <tr key={pedido.id}><td className="font-semibold">{pedido.cliente_lanche}</td><td>{pedido.data_entrega}</td><td>{pedido.solicitante}</td><td>{new Date(pedido.created_at).toLocaleString("pt-BR")}</td><td><button type="button" onClick={() => void removerPedido(pedido)} className="btn btn-ghost btn-xs text-error" aria-label={`Apagar encomenda de ${pedido.cliente_lanche}`}>Apagar</button></td></tr>)}</tbody>
+                                        <tbody>{historico.map((pedido) => <tr key={pedido.id}><td className="font-semibold">{pedido.cliente_lanche}</td><td>{pedido.data_entrega}</td><td>{pedido.solicitante}</td><td>{new Date(pedido.created_at).toLocaleString("pt-BR")}</td><td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void reimprimirPedido(pedido)} className="btn btn-sm btn-outline btn-primary gap-2 rounded-lg transition-colors" title="Reimprimir PDF" aria-label={`Reimprimir PDF de ${pedido.cliente_lanche}`}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2m-10 3h8v-7h-8v7Z" /></svg><span className="hidden sm:inline">Reimprimir</span></button><button type="button" onClick={() => void removerPedido(pedido)} className="btn btn-sm btn-outline btn-error gap-2 rounded-lg transition-colors" title="Apagar encomenda" aria-label={`Apagar encomenda de ${pedido.cliente_lanche}`}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18m-2 0-1 14H6L5 6m3 0V4h8v2m-5 4v7m4-7v7" /></svg><span className="hidden sm:inline">Apagar</span></button></div></td></tr>)}</tbody>
                                     </table>
                                 )}
                             </div>
@@ -443,6 +474,20 @@ export default function Sidebar() {
                                     <input type="checkbox" className="toggle toggle-primary" checked={salvamentoAutomatico} onChange={(event) => alternarSalvamento(event.target.checked)} />
                                 </label>
                             </section>
+                        </div>
+                    )}
+
+                    {reimpressao && (
+                        <div className="hidden" aria-hidden="true">
+                            <EncomendaA4
+                                clienteLanche={reimpressao.pedido.cliente_lanche}
+                                dataEntrega={reimpressao.pedido.data_entrega}
+                                solicitante={reimpressao.pedido.solicitante}
+                                observacao={reimpressao.pedido.observacao || ""}
+                                dataSolicitada={reimpressao.pedido.created_at.slice(0, 10)}
+                                itens={reimpressao.itens}
+                                baixarAutomaticamente
+                            />
                         </div>
                     )}
                 </main>

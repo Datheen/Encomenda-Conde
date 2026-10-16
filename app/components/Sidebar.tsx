@@ -474,6 +474,10 @@ export default function Sidebar() {
                                     <input type="checkbox" className="toggle toggle-primary" checked={salvamentoAutomatico} onChange={(event) => alternarSalvamento(event.target.checked)} />
                                 </label>
                             </section>
+
+                            <p className="mt-8 text-center text-xs text-base-content/50">
+                                Desenvolvido por <span className="font-semibold text-base-content/70">Cristian Almeida - Full Stack Developer</span>
+                            </p>
                         </div>
                     )}
 

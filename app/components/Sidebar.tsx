@@ -32,12 +32,35 @@ type Reimpressao = {
 
 const cores = ["Tradicional", "Vermelho", "Verde", "Azul", "Amarelo"];
 const quantidades = Array.from({ length: 20 }, (_, index) => index + 1);
+const clientesPredefinidos = [
+    "Mais Ki Gostoso",
+    "Combinados Lanche",
+    "Lanchonete D'Lurdes",
+    "Wish Burguer",
+    "Amazon Burguer",
+];
+const clientesStorageKey = "brioches-clientes-sugeridos";
 const coresAcento = [
     { nome: "Azul", valor: "#2563eb" },
     { nome: "Verde", valor: "#16a34a" },
     { nome: "Vermelho", valor: "#dc2626" },
     { nome: "Roxo", valor: "#9333ea" },
 ] as const;
+
+function destacarCorrespondencia(texto: string, busca: string) {
+    if (!busca.trim()) return texto;
+
+    const inicio = texto.toLowerCase().indexOf(busca.trim().toLowerCase());
+    if (inicio < 0) return texto;
+
+    return (
+        <>
+            {texto.slice(0, inicio)}
+            <strong className="font-semibold text-base-content">{texto.slice(inicio, inicio + busca.trim().length)}</strong>
+            {texto.slice(inicio + busca.trim().length)}
+        </>
+    );
+}
 
 export default function Sidebar() {
     const [cliente, setCliente] = useState("");
@@ -59,15 +82,29 @@ export default function Sidebar() {
     const [salvamentoAutomatico, setSalvamentoAutomatico] = useState(true);
     const [corAcento, setCorAcento] = useState("#dc2626");
     const [reimpressao, setReimpressao] = useState<Reimpressao | null>(null);
+    const [clientesSugeridos, setClientesSugeridos] = useState(clientesPredefinidos);
+    const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
+    const [sugestaoSelecionada, setSugestaoSelecionada] = useState(-1);
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
             const temaSalvo = window.localStorage.getItem("brioches-tema") === "escuro";
             const salvamentoSalvo = window.localStorage.getItem("brioches-salvamento") !== "desativado";
             const corSalva = window.localStorage.getItem("brioches-cor-acento") || "#dc2626";
+            const clientesSalvos = window.localStorage.getItem(clientesStorageKey);
             setTemaEscuro(temaSalvo);
             setSalvamentoAutomatico(salvamentoSalvo);
             setCorAcento(corSalva);
+            if (clientesSalvos) {
+                try {
+                    const clientes = JSON.parse(clientesSalvos);
+                    if (Array.isArray(clientes)) {
+                        setClientesSugeridos(Array.from(new Set([...clientesPredefinidos, ...clientes])));
+                    }
+                } catch {
+                    window.localStorage.removeItem(clientesStorageKey);
+                }
+            }
             document.documentElement.dataset.theme = temaSalvo ? "brioches-dark" : "brioches-light";
             document.documentElement.style.setProperty("--color-primary", corSalva);
             document.documentElement.style.setProperty("--color-primary-content", "#ffffff");
@@ -93,6 +130,24 @@ export default function Sidebar() {
         document.documentElement.style.setProperty("--color-primary", cor);
         document.documentElement.style.setProperty("--color-primary-content", "#ffffff");
     }
+
+    function salvarClienteSugerido(valor: string) {
+        const clienteSalvo = valor.trim();
+        if (!clienteSalvo) return;
+
+        setClientesSugeridos((clientesAtuais) => {
+            const clientesAtualizados = [
+                clienteSalvo,
+                ...clientesAtuais.filter((clienteAtual) => clienteAtual.toLowerCase() !== clienteSalvo.toLowerCase()),
+            ];
+            window.localStorage.setItem(clientesStorageKey, JSON.stringify(clientesAtualizados));
+            return clientesAtualizados;
+        });
+    }
+
+    const clientesFiltrados = clientesSugeridos
+        .filter((clienteSugerido) => clienteSugerido.toLowerCase().includes(cliente.trim().toLowerCase()))
+        .slice(0, 6);
 
     function adicionarItem(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
@@ -134,6 +189,7 @@ export default function Sidebar() {
 
     async function salvarPedido(): Promise<boolean> {
         setMensagem("");
+        salvarClienteSugerido(cliente);
 
         if (pedidoSalvo) {
             return true;
@@ -268,13 +324,13 @@ export default function Sidebar() {
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M9 6V4h6v2m-9 0 1 14h10l1-14M10 10v6m4-6v6" />
                                 </svg>
-                                <span className="hidden sm:inline">Limpar tudo</span>
+                                <span className="hidden sm:inline">Limpar</span>
                             </button>
                         </div>
 
                         <section className="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm lg:p-7">
                             <div className="mb-6 flex items-center gap-3">
-                                <div className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
+                                <div className="grid size-9 place-items-center rounded-full bg-primary/10 text-primary">
                                     <span className="text-sm font-bold">01</span>
                                 </div>
                                 <div>
@@ -284,10 +340,72 @@ export default function Sidebar() {
                             </div>
 
                             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                                <label className="form-control lg:col-span-2">
+                                <div className="form-control relative lg:col-span-2">
                                     <span className="label-text mb-2 text-sm font-medium">Cliente / Lanche</span>
-                                    <input value={cliente} onChange={(event) => setCliente(event.target.value)} type="text" placeholder="Ex.: Lanche do Alvorada" className="input input-bordered w-full" />
-                                </label>
+                                    <div className="relative">
+                                        <svg className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-base-content/45" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                            <circle cx="11" cy="11" r="7" />
+                                            <path strokeLinecap="round" d="m20 20-4-4" />
+                                        </svg>
+                                        <input
+                                            id="cliente-lanche"
+                                            value={cliente}
+                                            onChange={(event) => {
+                                                setCliente(event.target.value);
+                                                setMostrarSugestoes(true);
+                                                setSugestaoSelecionada(-1);
+                                            }}
+                                            onFocus={() => setMostrarSugestoes(true)}
+                                            onBlur={() => {
+                                                window.setTimeout(() => setMostrarSugestoes(false), 150);
+                                                salvarClienteSugerido(cliente);
+                                            }}
+                                            onKeyDown={(event) => {
+                                                if (!mostrarSugestoes || clientesFiltrados.length === 0) return;
+                                                if (event.key === "ArrowDown") {
+                                                    event.preventDefault();
+                                                    setSugestaoSelecionada((indice) => Math.min(indice + 1, clientesFiltrados.length - 1));
+                                                } else if (event.key === "ArrowUp") {
+                                                    event.preventDefault();
+                                                    setSugestaoSelecionada((indice) => Math.max(indice - 1, 0));
+                                                } else if (event.key === "Enter" && sugestaoSelecionada >= 0) {
+                                                    event.preventDefault();
+                                                    setCliente(clientesFiltrados[sugestaoSelecionada]);
+                                                    setMostrarSugestoes(false);
+                                                } else if (event.key === "Escape") {
+                                                    setMostrarSugestoes(false);
+                                                }
+                                            }}
+                                            type="text"
+                                            placeholder="Ex.: Lanche do Alvorada"
+                                            autoComplete="off"
+                                            className="input input-bordered w-full pr-9"
+                                        />
+                                        {mostrarSugestoes && clientesFiltrados.length > 0 && (
+                                            <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-base-300 bg-base-100 py-2 shadow-xl">
+                                                <p className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45">Sugestões</p>
+                                                {clientesFiltrados.map((clienteSugerido, indice) => (
+                                                    <button
+                                                        key={clienteSugerido}
+                                                        type="button"
+                                                        onMouseDown={(event) => event.preventDefault()}
+                                                        onClick={() => {
+                                                            setCliente(clienteSugerido);
+                                                            setMostrarSugestoes(false);
+                                                            setSugestaoSelecionada(-1);
+                                                        }}
+                                                        className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${indice === sugestaoSelecionada ? "bg-base-200" : "hover:bg-base-200"}`}
+                                                    >
+                                                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-base-200 text-base-content/55">
+                                                            <svg className="text-cyan-700" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M367-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm296.5-343.5Q560-607 560-640t-23.5-56.5Q513-720 480-720t-56.5 23.5Q400-673 400-640t23.5 56.5Q447-560 480-560t56.5-23.5ZM480-640Zm0 400Z"/></svg>
+                                                        </span>
+                                                        <span>{destacarCorrespondencia(clienteSugerido, cliente)}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                                 <label className="form-control">
                                     <span className="label-text mb-2 text-sm font-medium">Data de entrega</span>
                                     <input value={dataEntrega} onChange={(event) => setDataEntrega(event.target.value)} type="date" className="input input-bordered w-full" />
@@ -305,7 +423,7 @@ export default function Sidebar() {
 
                         <section className="mt-5 rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm lg:p-7">
                             <div className="mb-6 flex items-center gap-3">
-                                <div className="grid size-9 place-items-center rounded-lg bg-secondary/10 text-secondary">
+                                <div className="grid size-9 place-items-center rounded-full bg-secondary/10 text-secondary">
                                     <span className="text-sm font-bold">02</span>
                                 </div>
                                 <div>
@@ -501,11 +619,11 @@ export default function Sidebar() {
                 <label htmlFor="navigation-drawer" aria-label="Fechar navegação" className="drawer-overlay" />
                 <aside className="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 p-4 text-base-content">
                     <div className="flex items-center gap-3 border-b border-base-300 px-2 pb-5 pt-2">
-                        <div id="logo" className="grid size-10 place-items-center overflow-hidden text-primary-content shadow-sm">
+                        <div id="logo" className="grid size-10 place-items-center overflow-hidden text-primary-content">
                             <Image src="/favicon.ico" alt="Logo Conde do Pão" width={40} height={40} className="size-full object-cover" />
                         </div>
                         <div>
-                            <p className="font-bold leading-tight">Conde do Pão</p>
+                            <p id="text-layer" className="font-bold leading-tight">Conde do Pão</p>
                             <p className="text-xs text-base-content/60">Pedido de Brioches</p>
                         </div>
                     </div>

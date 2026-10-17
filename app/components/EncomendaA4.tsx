@@ -103,7 +103,7 @@ function EncomendaPdf({
 }: EncomendaA4Props & { dataSolicitada: string }) {
   return (
     <Document>
-      <Page size="A4" style={pdfStyles.page} wrap={false}>
+      <Page size={[595.28, 841.89]} orientation="portrait" style={pdfStyles.page}>
         <View style={pdfStyles.table}>
           <View style={pdfStyles.row}>
             <View style={[pdfStyles.cell, { width: "100%", borderRightWidth: 0 }]}><Text wrap={false} style={pdfStyles.headerTitle}>ENCOMENDA DE PÃO BRIOCHE - CAIXA EXPEDIÇÃO</Text></View>

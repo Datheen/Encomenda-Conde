@@ -40,6 +40,8 @@ const clientesPredefinidos = [
     "Amazon Burguer",
 ];
 const clientesStorageKey = "brioches-clientes-sugeridos";
+const solicitantesPredefinidos = ["Fernanda", "Cristian", "Diana"];
+const solicitantesStorageKey = "brioches-solicitantes-sugeridos";
 const coresAcento = [
     { nome: "Azul", valor: "#2563eb" },
     { nome: "Verde", valor: "#16a34a" },
@@ -85,6 +87,9 @@ export default function Sidebar() {
     const [clientesSugeridos, setClientesSugeridos] = useState(clientesPredefinidos);
     const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
     const [sugestaoSelecionada, setSugestaoSelecionada] = useState(-1);
+    const [solicitantesSugeridos, setSolicitantesSugeridos] = useState(solicitantesPredefinidos);
+    const [mostrarSugestoesSolicitante, setMostrarSugestoesSolicitante] = useState(false);
+    const [solicitanteSelecionado, setSolicitanteSelecionado] = useState(-1);
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -92,6 +97,7 @@ export default function Sidebar() {
             const salvamentoSalvo = window.localStorage.getItem("brioches-salvamento") !== "desativado";
             const corSalva = window.localStorage.getItem("brioches-cor-acento") || "#dc2626";
             const clientesSalvos = window.localStorage.getItem(clientesStorageKey);
+            const solicitantesSalvos = window.localStorage.getItem(solicitantesStorageKey);
             setTemaEscuro(temaSalvo);
             setSalvamentoAutomatico(salvamentoSalvo);
             setCorAcento(corSalva);
@@ -103,6 +109,16 @@ export default function Sidebar() {
                     }
                 } catch {
                     window.localStorage.removeItem(clientesStorageKey);
+                }
+            }
+            if (solicitantesSalvos) {
+                try {
+                    const solicitantes = JSON.parse(solicitantesSalvos);
+                    if (Array.isArray(solicitantes)) {
+                        setSolicitantesSugeridos(Array.from(new Set([...solicitantesPredefinidos, ...solicitantes])));
+                    }
+                } catch {
+                    window.localStorage.removeItem(solicitantesStorageKey);
                 }
             }
             document.documentElement.dataset.theme = temaSalvo ? "brioches-dark" : "brioches-light";
@@ -145,8 +161,25 @@ export default function Sidebar() {
         });
     }
 
+    function salvarSolicitanteSugerido(valor: string) {
+        const solicitanteSalvo = valor.trim();
+        if (!solicitanteSalvo) return;
+
+        setSolicitantesSugeridos((solicitantesAtuais) => {
+            const solicitantesAtualizados = [
+                solicitanteSalvo,
+                ...solicitantesAtuais.filter((solicitanteAtual) => solicitanteAtual.toLowerCase() !== solicitanteSalvo.toLowerCase()),
+            ];
+            window.localStorage.setItem(solicitantesStorageKey, JSON.stringify(solicitantesAtualizados));
+            return solicitantesAtualizados;
+        });
+    }
+
     const clientesFiltrados = clientesSugeridos
         .filter((clienteSugerido) => clienteSugerido.toLowerCase().includes(cliente.trim().toLowerCase()))
+        .slice(0, 6);
+    const solicitantesFiltrados = solicitantesSugeridos
+        .filter((solicitanteSugerido) => solicitanteSugerido.toLowerCase().includes(solicitante.trim().toLowerCase()))
         .slice(0, 6);
 
     function adicionarItem(event: FormEvent<HTMLFormElement>) {
@@ -190,6 +223,7 @@ export default function Sidebar() {
     async function salvarPedido(): Promise<boolean> {
         setMensagem("");
         salvarClienteSugerido(cliente);
+        salvarSolicitanteSugerido(solicitante);
 
         if (pedidoSalvo) {
             return true;
@@ -410,10 +444,64 @@ export default function Sidebar() {
                                     <span className="label-text mb-2 text-sm font-medium">Data de entrega</span>
                                     <input value={dataEntrega} onChange={(event) => setDataEntrega(event.target.value)} type="date" className="input input-bordered w-full" />
                                 </label>
-                                <label className="form-control">
+                                <div className="form-control relative">
                                     <span className="label-text mb-2 text-sm font-medium">Solicitante</span>
-                                    <input value={solicitante} onChange={(event) => setSolicitante(event.target.value)} type="text" placeholder="Nome do solicitante" className="input input-bordered w-full" />
-                                </label>
+                                    <div className="relative">
+                                        <input
+                                            value={solicitante}
+                                            onChange={(event) => {
+                                                setSolicitante(event.target.value);
+                                                setMostrarSugestoesSolicitante(true);
+                                                setSolicitanteSelecionado(-1);
+                                            }}
+                                            onFocus={() => setMostrarSugestoesSolicitante(true)}
+                                            onBlur={() => {
+                                                window.setTimeout(() => setMostrarSugestoesSolicitante(false), 150);
+                                                salvarSolicitanteSugerido(solicitante);
+                                            }}
+                                            onKeyDown={(event) => {
+                                                if (!mostrarSugestoesSolicitante || solicitantesFiltrados.length === 0) return;
+                                                if (event.key === "ArrowDown") {
+                                                    event.preventDefault();
+                                                    setSolicitanteSelecionado((indice) => Math.min(indice + 1, solicitantesFiltrados.length - 1));
+                                                } else if (event.key === "ArrowUp") {
+                                                    event.preventDefault();
+                                                    setSolicitanteSelecionado((indice) => Math.max(indice - 1, 0));
+                                                } else if (event.key === "Enter" && solicitanteSelecionado >= 0) {
+                                                    event.preventDefault();
+                                                    setSolicitante(solicitantesFiltrados[solicitanteSelecionado]);
+                                                    setMostrarSugestoesSolicitante(false);
+                                                } else if (event.key === "Escape") {
+                                                    setMostrarSugestoesSolicitante(false);
+                                                }
+                                            }}
+                                            type="text"
+                                            placeholder="Nome do solicitante"
+                                            autoComplete="off"
+                                            className="input input-bordered w-full"
+                                        />
+                                        {mostrarSugestoesSolicitante && solicitantesFiltrados.length > 0 && (
+                                            <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-base-300 bg-base-100 py-2 shadow-xl">
+                                                <p className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45">Sugestões</p>
+                                                {solicitantesFiltrados.map((solicitanteSugerido, indice) => (
+                                                    <button
+                                                        key={solicitanteSugerido}
+                                                        type="button"
+                                                        onMouseDown={(event) => event.preventDefault()}
+                                                        onClick={() => {
+                                                            setSolicitante(solicitanteSugerido);
+                                                            setMostrarSugestoesSolicitante(false);
+                                                            setSolicitanteSelecionado(-1);
+                                                        }}
+                                                        className={`block w-full px-4 py-2.5 text-left text-sm transition-colors ${indice === solicitanteSelecionado ? "bg-base-200" : "hover:bg-base-200"}`}
+                                                    >
+                                                        {destacarCorrespondencia(solicitanteSugerido, solicitante)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                                 <label className="form-control md:col-span-2">
                                     <span className="label-text mb-2 text-sm font-medium">Observação <span className="font-normal text-base-content/50">(opcional)</span></span>
                                     <input value={observacao} onChange={(event) => setObservacao(event.target.value)} type="text" placeholder="Alguma informação importante sobre a entrega" className="input input-bordered w-full" />

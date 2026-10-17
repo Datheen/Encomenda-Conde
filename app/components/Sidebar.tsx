@@ -623,7 +623,9 @@ export default function Sidebar() {
                             <Image src="/favicon.ico" alt="Logo Conde do Pão" width={40} height={40} className="size-full object-cover" />
                         </div>
                         <div>
-                            <p id="text-layer" className="font-bold leading-tight">Conde do Pão</p>
+                            <div id="text-layer" className="relative h-6 w-36">
+                                <Image src="/textlayer.webp" alt="Conde do Pão" fill sizes="144px" className="object-contain object-left" />
+                            </div>
                             <p className="text-xs text-base-content/60">Pedido de Brioches</p>
                         </div>
                     </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import EncomendaA4, { EncomendaA4Item } from "./EncomendaA4";
 import { supabase } from "../../lib/supabase";
 
@@ -26,11 +26,12 @@ type HistoricoPedido = {
 };
 
 type Reimpressao = {
+    chave: number;
     pedido: HistoricoPedido;
     itens: EncomendaA4Item[];
 };
 
-const cores = ["Tradicional", "Vermelho", "Verde", "Azul", "Amarelo"];
+const cores = ["Tradicional", "Vermelho", "Verde", "Azul", "Amarelo", "Mesclado"];
 const quantidades = Array.from({ length: 34 }, (_, index) => index + 1);
 const clientesPredefinidos = [
     "MAIS KI GOSTOSO",
@@ -89,6 +90,7 @@ export default function Sidebar() {
     const [salvamentoAutomatico, setSalvamentoAutomatico] = useState(true);
     const [corAcento, setCorAcento] = useState("#dc2626");
     const [reimpressao, setReimpressao] = useState<Reimpressao | null>(null);
+    const reimpressaoSequencia = useRef(0);
     const [clientesSugeridos, setClientesSugeridos] = useState(clientesPredefinidos);
     const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
     const [sugestaoSelecionada, setSugestaoSelecionada] = useState(-1);
@@ -344,7 +346,9 @@ export default function Sidebar() {
             return;
         }
 
+        reimpressaoSequencia.current += 1;
         setReimpressao({
+            chave: reimpressaoSequencia.current,
             pedido,
             itens: (data || []).map((item) => ({
                 codigo: item.codigo,
@@ -723,6 +727,7 @@ export default function Sidebar() {
                     {reimpressao && (
                         <div className="hidden" aria-hidden="true">
                             <EncomendaA4
+                                key={reimpressao.chave}
                                 clienteLanche={reimpressao.pedido.cliente_lanche}
                                 dataEntrega={reimpressao.pedido.data_entrega}
                                 solicitante={reimpressao.pedido.solicitante}

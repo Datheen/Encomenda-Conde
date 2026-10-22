@@ -31,7 +31,7 @@ type Reimpressao = {
 };
 
 const cores = ["Tradicional", "Vermelho", "Verde", "Azul", "Amarelo"];
-const quantidades = Array.from({ length: 20 }, (_, index) => index + 1);
+const quantidades = Array.from({ length: 34 }, (_, index) => index + 1);
 const clientesPredefinidos = [
     "MAIS KI GOSTOSO",
     "COMBINADOS LANCHE",

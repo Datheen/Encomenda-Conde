@@ -33,11 +33,11 @@ type Reimpressao = {
 const cores = ["Tradicional", "Vermelho", "Verde", "Azul", "Amarelo"];
 const quantidades = Array.from({ length: 20 }, (_, index) => index + 1);
 const clientesPredefinidos = [
-    "Mais Ki Gostoso",
-    "Combinados Lanche",
-    "Lanchonete D'Lurdes",
-    "Wish Burguer",
-    "Amazon Burguer",
+    "MAIS KI GOSTOSO",
+    "COMBINADOS LANCHE",
+    "LANCHONETE D'LURDES",
+    "WISH BURGUER",
+    "AMAZON BURGUER",
 ];
 const clientesStorageKey = "brioches-clientes-sugeridos";
 const solicitantesPredefinidos = ["Fernanda", "Cristian", "Diana"];
@@ -62,6 +62,11 @@ function destacarCorrespondencia(texto: string, busca: string) {
             {texto.slice(inicio + busca.trim().length)}
         </>
     );
+}
+
+function formatarDataEntrega(data: string) {
+    const [ano, mes, dia] = data.split("-");
+    return ano && mes && dia ? `${dia}/${mes}/${ano.slice(-2)}` : data;
 }
 
 export default function Sidebar() {
@@ -105,7 +110,10 @@ export default function Sidebar() {
                 try {
                     const clientes = JSON.parse(clientesSalvos);
                     if (Array.isArray(clientes)) {
-                        setClientesSugeridos(Array.from(new Set([...clientesPredefinidos, ...clientes])));
+                        const clientesMaiusculos = clientes
+                            .filter((cliente): cliente is string => typeof cliente === "string")
+                            .map((cliente) => cliente.toUpperCase());
+                        setClientesSugeridos(Array.from(new Set([...clientesPredefinidos, ...clientesMaiusculos])));
                     }
                 } catch {
                     window.localStorage.removeItem(clientesStorageKey);
@@ -148,7 +156,7 @@ export default function Sidebar() {
     }
 
     function salvarClienteSugerido(valor: string) {
-        const clienteSalvo = valor.trim();
+        const clienteSalvo = valor.trim().toUpperCase();
         if (!clienteSalvo) return;
 
         setClientesSugeridos((clientesAtuais) => {
@@ -156,6 +164,16 @@ export default function Sidebar() {
                 clienteSalvo,
                 ...clientesAtuais.filter((clienteAtual) => clienteAtual.toLowerCase() !== clienteSalvo.toLowerCase()),
             ];
+            window.localStorage.setItem(clientesStorageKey, JSON.stringify(clientesAtualizados));
+            return clientesAtualizados;
+        });
+    }
+
+    function removerClienteSugerido(clienteParaRemover: string) {
+        if (clientesPredefinidos.includes(clienteParaRemover)) return;
+
+        setClientesSugeridos((clientesAtuais) => {
+            const clientesAtualizados = clientesAtuais.filter((clienteAtual) => clienteAtual !== clienteParaRemover);
             window.localStorage.setItem(clientesStorageKey, JSON.stringify(clientesAtualizados));
             return clientesAtualizados;
         });
@@ -385,7 +403,7 @@ export default function Sidebar() {
                                             id="cliente-lanche"
                                             value={cliente}
                                             onChange={(event) => {
-                                                setCliente(event.target.value);
+                                                setCliente(event.target.value.toUpperCase());
                                                 setMostrarSugestoes(true);
                                                 setSugestaoSelecionada(-1);
                                             }}
@@ -418,24 +436,37 @@ export default function Sidebar() {
                                         {mostrarSugestoes && clientesFiltrados.length > 0 && (
                                             <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-base-300 bg-base-100 py-2 shadow-xl">
                                                 <p className="px-4 pb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-base-content/45">Sugestões</p>
-                                                {clientesFiltrados.map((clienteSugerido, indice) => (
-                                                    <button
-                                                        key={clienteSugerido}
-                                                        type="button"
-                                                        onMouseDown={(event) => event.preventDefault()}
-                                                        onClick={() => {
-                                                            setCliente(clienteSugerido);
-                                                            setMostrarSugestoes(false);
-                                                            setSugestaoSelecionada(-1);
-                                                        }}
-                                                        className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${indice === sugestaoSelecionada ? "bg-base-200" : "hover:bg-base-200"}`}
-                                                    >
-                                                        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-base-200 text-base-content/55">
-                                                            <svg className="text-cyan-700" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M367-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm296.5-343.5Q560-607 560-640t-23.5-56.5Q513-720 480-720t-56.5 23.5Q400-673 400-640t23.5 56.5Q447-560 480-560t56.5-23.5ZM480-640Zm0 400Z"/></svg>
-                                                        </span>
-                                                        <span>{destacarCorrespondencia(clienteSugerido, cliente)}</span>
-                                                    </button>
-                                                ))}
+                                                {clientesFiltrados.map((clienteSugerido, indice) => {
+                                                    return (
+                                                        <div key={clienteSugerido} className={`flex items-center ${indice === sugestaoSelecionada ? "bg-base-200" : "hover:bg-base-200"}`}>
+                                                            <button
+                                                                type="button"
+                                                                onMouseDown={(event) => event.preventDefault()}
+                                                                onClick={() => {
+                                                                    setCliente(clienteSugerido);
+                                                                    setMostrarSugestoes(false);
+                                                                    setSugestaoSelecionada(-1);
+                                                                }}
+                                                                className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2.5 text-left text-sm"
+                                                            >
+                                                                <span className="grid size-7 shrink-0 place-items-center rounded-full bg-base-200 text-base-content/55">
+                                                                    <svg className="text-cyan-700" xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M367-527q-47-47-47-113t47-113q47-47 113-47t113 47q47 47 47 113t-47 113q-47 47-113 47t-113-47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Zm80-80h480v-32q0-11-5.5-20T700-306q-54-27-109-40.5T480-360q-56 0-111 13.5T260-306q-9 5-14.5 14t-5.5 20v32Zm296.5-343.5Q560-607 560-640t-23.5-56.5Q513-720 480-720t-56.5 23.5Q400-673 400-640t23.5 56.5Q447-560 480-560t56.5-23.5ZM480-640Zm0 400Z" /></svg>
+                                                                </span>
+                                                                <span className="truncate">{destacarCorrespondencia(clienteSugerido, cliente)}</span>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onMouseDown={(event) => event.preventDefault()}
+                                                                onClick={() => removerClienteSugerido(clienteSugerido)}
+                                                                className="mr-2 flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold leading-none text-base-content/60 transition-colors hover:bg-error/10 hover:text-error"
+                                                                aria-label={`Apagar sugestão ${clienteSugerido}`}
+                                                                title="Apagar sugestão"
+                                                            >
+                                                                <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="24px" fill="#999999"><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z" /></svg>
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                     </div>
@@ -512,7 +543,7 @@ export default function Sidebar() {
                         <section className="mt-5 rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm lg:p-7">
                             <div className="mb-6 flex items-center gap-3">
                                 <div className="grid size-9 place-items-center rounded-full bg-secondary/10 text-secondary">
-                                    <span className="text-sm font-bold">02</span>
+                                    <span className="text-sm text-primary font-bold">02</span>
                                 </div>
                                 <div>
                                     <h2 className="font-bold">Itens da encomenda</h2>
@@ -622,7 +653,9 @@ export default function Sidebar() {
                                 ) : (
                                     <table className="table">
                                         <thead><tr><th>Cliente / Lanche</th><th>Entrega</th><th>Solicitante</th><th>Criado em</th><th>Ações</th></tr></thead>
-                                        <tbody>{historico.map((pedido) => <tr key={pedido.id}><td className="font-semibold">{pedido.cliente_lanche}</td><td>{pedido.data_entrega}</td><td>{pedido.solicitante}</td><td>{new Date(pedido.created_at).toLocaleString("pt-BR")}</td><td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void reimprimirPedido(pedido)} className="btn btn-sm btn-outline btn-primary gap-2 rounded-lg transition-colors" title="Reimprimir PDF" aria-label={`Reimprimir PDF de ${pedido.cliente_lanche}`}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2m-10 3h8v-7h-8v7Z" /></svg><span className="hidden sm:inline">Reimprimir</span></button><button type="button" onClick={() => void removerPedido(pedido)} className="btn btn-sm btn-outline btn-error gap-2 rounded-lg transition-colors" title="Apagar encomenda" aria-label={`Apagar encomenda de ${pedido.cliente_lanche}`}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18m-2 0-1 14H6L5 6m3 0V4h8v2m-5 4v7m4-7v7" /></svg><span className="hidden sm:inline">Apagar</span></button></div></td></tr>)}</tbody>
+                                        <tbody>{historico.map((pedido) => <tr key={pedido.id}><td className="font-semibold">{pedido.cliente_lanche}</td><td>{formatarDataEntrega(pedido.data_entrega)}</td><td>{pedido.solicitante}</td><td>{new Date(pedido.created_at).toLocaleString("pt-BR")}</td><td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void reimprimirPedido(pedido)} className="btn btn-sm btn-outline btn-primary gap-2 rounded-lg transition-colors" title="Reimprimir PDF" aria-label={`Reimprimir PDF de ${pedido.cliente_lanche}`}><svg className="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linejoin="round" stroke-width="2" d="M16.444 18H19a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2.556M17 11V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v6h10ZM7 15h10v4a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-4Z" />
+                                        </svg>
+                                            <span className="hidden sm:inline">Reimprimir</span></button><button type="button" onClick={() => void removerPedido(pedido)} className="btn btn-sm btn-outline btn-error gap-2 rounded-lg transition-colors" title="Apagar encomenda" aria-label={`Apagar encomenda de ${pedido.cliente_lanche}`}><span className="hidden sm:inline">Apagar</span></button></div></td></tr>)}</tbody>
                                     </table>
                                 )}
                             </div>
@@ -725,20 +758,20 @@ export default function Sidebar() {
                         <ul className="menu gap-2 p-0">
                             <li>
                                 <Link href="/" onClick={() => setTela("inicio")} className="active:bg-primary active:text-primary-content">
-                                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="size-6 text-primary" fill="currentColor" aria-hidden="true"><path d="M240-200h120v-240h240v240h120v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H520v-240h-80v240H160Zm320-350Z"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="size-6 text-primary" fill="currentColor" aria-hidden="true"><path d="M240-200h120v-240h240v240h120v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H520v-240h-80v240H160Zm320-350Z" /></svg>
                                     <span>Início</span>
                                     <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">Encomendas</span>
                                 </Link>
                             </li>
                             <li>
                                 <a href="#historico" onClick={(event) => { event.preventDefault(); void abrirHistorico(); }}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="size-6 text-primary" fill="currentColor" aria-hidden="true"><path d="M480-120q-138 0-240.5-91.5T122-440h82q14 104 92.5 172T480-200q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h110v80H120v-240h80v94q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm112-192L440-464v-216h80v184l128 128-56 56Z"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="size-6 text-primary" fill="currentColor" aria-hidden="true"><path d="M480-120q-138 0-240.5-91.5T122-440h82q14 104 92.5 172T480-200q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h110v80H120v-240h80v94q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm112-192L440-464v-216h80v184l128 128-56 56Z" /></svg>
                                     <span>Histórico</span>
                                 </a>
                             </li>
                             <li>
                                 <a href="#configuracoes" onClick={(event) => { event.preventDefault(); setTela("configuracoes"); }}>
-                                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="size-6 text-primary" fill="currentColor" aria-hidden="true"><path d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm70-80h79l14-106q31-8 57.5-23.5T639-327l99 41 39-68-86-65q5-14 7-29.5t2-31.5q0-16-2-31.5t-7-29.5l86-65-39-68-99 42q-22-23-48.5-38.5T533-694l-13-106h-79l-14 106q-31 8-57.5 23.5T321-633l-99-41-39 68 86 64q-5 15-7 30t-2 32q0 16 2 31t7 30l-86 65 39 68 99-42q22 23 48.5 38.5T427-266l13 106Zm42-180q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Zm-2-140Z"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="size-6 text-primary" fill="currentColor" aria-hidden="true"><path d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm70-80h79l14-106q31-8 57.5-23.5T639-327l99 41 39-68-86-65q5-14 7-29.5t2-31.5q0-16-2-31.5t-7-29.5l86-65-39-68-99 42q-22-23-48.5-38.5T533-694l-13-106h-79l-14 106q-31 8-57.5 23.5T321-633l-99-41-39 68 86 64q-5 15-7 30t-2 32q0 16 2 31t7 30l-86 65 39 68 99-42q22 23 48.5 38.5T427-266l13 106Zm42-180q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Zm-2-140Z" /></svg>
                                     <span>Configurações</span>
                                 </a>
                             </li>

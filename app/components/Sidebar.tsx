@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import EncomendaA4, { EncomendaA4Item } from "./EncomendaA4";
 import { supabase } from "../../lib/supabase";
 
@@ -25,6 +25,14 @@ type HistoricoPedido = {
     created_at: string;
 };
 
+type ItemEntrega = EncomendaA4Item & {
+    encomenda_id: string;
+};
+
+type EntregaHoje = HistoricoPedido & {
+    itens: ItemEntrega[];
+};
+
 type Reimpressao = {
     chave: number;
     pedido: HistoricoPedido;
@@ -43,6 +51,9 @@ const clientesPredefinidos = [
 const clientesStorageKey = "brioches-clientes-sugeridos";
 const solicitantesPredefinidos = ["Fernanda", "Cristian", "Diana"];
 const solicitantesStorageKey = "brioches-solicitantes-sugeridos";
+const telaStorageKey = "brioches-ultima-tela";
+const entregasDispensadasStorageKey = "brioches-entregas-dispensadas";
+const historicoPaginaTamanho = 10;
 const coresAcento = [
     { nome: "Azul", valor: "#2563eb" },
     { nome: "Verde", valor: "#16a34a" },
@@ -70,6 +81,18 @@ function formatarDataEntrega(data: string) {
     return ano && mes && dia ? `${dia}/${mes}/${ano.slice(-2)}` : data;
 }
 
+function obterEntregasDispensadasHoje(dataHoje: string) {
+    const chave = `${entregasDispensadasStorageKey}-${dataHoje}`;
+
+    try {
+        const ids = JSON.parse(window.localStorage.getItem(chave) || "[]");
+        return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+    } catch {
+        window.localStorage.removeItem(chave);
+        return [];
+    }
+}
+
 export default function Sidebar() {
     const [cliente, setCliente] = useState("");
     const [dataEntrega, setDataEntrega] = useState("");
@@ -80,11 +103,15 @@ export default function Sidebar() {
     const [aro, setAro] = useState<"60" | "80">("80");
     const [cor, setCor] = useState(cores[0]);
     const [itens, setItens] = useState<BriocheItem[]>([]);
-    const [tela, setTela] = useState<"inicio" | "historico" | "configuracoes">("inicio");
+    const [tela, setTela] = useState<"inicio" | "entregar" | "historico" | "configuracoes">("inicio");
     const [historico, setHistorico] = useState<HistoricoPedido[]>([]);
+    const [paginaHistorico, setPaginaHistorico] = useState(1);
+    const [totalHistorico, setTotalHistorico] = useState(0);
+    const [entregasDeHoje, setEntregasDeHoje] = useState<EntregaHoje[]>([]);
     const [salvandoPedido, setSalvandoPedido] = useState(false);
     const [pedidoSalvo, setPedidoSalvo] = useState(false);
     const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+    const [carregandoEntregas, setCarregandoEntregas] = useState(false);
     const [mensagem, setMensagem] = useState("");
     const [temaEscuro, setTemaEscuro] = useState(false);
     const [salvamentoAutomatico, setSalvamentoAutomatico] = useState(true);
@@ -100,12 +127,16 @@ export default function Sidebar() {
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
+            const telaSalva = window.localStorage.getItem(telaStorageKey);
             const temaSalvo = window.localStorage.getItem("brioches-tema") === "escuro";
             const salvamentoSalvo = window.localStorage.getItem("brioches-salvamento") !== "desativado";
             const corSalva = window.localStorage.getItem("brioches-cor-acento") || "#dc2626";
             const clientesSalvos = window.localStorage.getItem(clientesStorageKey);
             const solicitantesSalvos = window.localStorage.getItem(solicitantesStorageKey);
             setTemaEscuro(temaSalvo);
+            if (telaSalva === "inicio" || telaSalva === "entregar" || telaSalva === "historico" || telaSalva === "configuracoes") {
+                setTela(telaSalva);
+            }
             setSalvamentoAutomatico(salvamentoSalvo);
             setCorAcento(corSalva);
             if (clientesSalvos) {
@@ -139,6 +170,11 @@ export default function Sidebar() {
         return () => window.clearTimeout(timer);
     }, []);
 
+    function mudarTela(novaTela: "inicio" | "entregar" | "historico" | "configuracoes") {
+        setTela(novaTela);
+        window.localStorage.setItem(telaStorageKey, novaTela);
+    }
+
     function alternarTema(escuro: boolean) {
         setTemaEscuro(escuro);
         window.localStorage.setItem("brioches-tema", escuro ? "escuro" : "claro");
@@ -155,6 +191,13 @@ export default function Sidebar() {
         window.localStorage.setItem("brioches-cor-acento", cor);
         document.documentElement.style.setProperty("--color-primary", cor);
         document.documentElement.style.setProperty("--color-primary-content", "#ffffff");
+    }
+
+    function obterDataHoje() {
+        const hoje = new Date();
+        const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+        const dia = String(hoje.getDate()).padStart(2, "0");
+        return `${hoje.getFullYear()}-${mes}-${dia}`;
     }
 
     function salvarClienteSugerido(valor: string) {
@@ -298,15 +341,16 @@ export default function Sidebar() {
         return true;
     }
 
-    async function abrirHistorico() {
-        setTela("historico");
+    async function carregarHistorico(pagina: number) {
         setMensagem("");
         setCarregandoHistorico(true);
 
-        const { data, error } = await supabase
+        const inicio = (pagina - 1) * historicoPaginaTamanho;
+        const { data, count, error } = await supabase
             .from("encomendas")
-            .select("id, cliente_lanche, data_entrega, solicitante, observacao, created_at")
-            .order("created_at", { ascending: false });
+            .select("id, cliente_lanche, data_entrega, solicitante, observacao, created_at", { count: "exact" })
+            .order("created_at", { ascending: false })
+            .range(inicio, inicio + historicoPaginaTamanho - 1);
 
         setCarregandoHistorico(false);
 
@@ -316,6 +360,77 @@ export default function Sidebar() {
         }
 
         setHistorico(data || []);
+        setPaginaHistorico(pagina);
+        setTotalHistorico(count || 0);
+    }
+
+    async function abrirHistorico() {
+        mudarTela("historico");
+        await carregarHistorico(1);
+    }
+
+    const carregarEntregasDeHoje = useCallback(async () => {
+        setCarregandoEntregas(true);
+
+        const { data, error } = await supabase
+            .from("encomendas")
+            .select("id, cliente_lanche, data_entrega, solicitante, observacao, created_at")
+            .eq("data_entrega", obterDataHoje())
+            .order("created_at", { ascending: false });
+
+        if (error) {
+            setCarregandoEntregas(false);
+            setMensagem(`Não foi possível carregar as entregas: ${error.message}`);
+            return;
+        }
+
+        const pedidos = data || [];
+        const { data: itensData, error: erroItens } = pedidos.length > 0
+            ? await supabase
+                .from("itens_encomenda")
+                .select("encomenda_id, codigo, quantidade, unidade, gergelim, aro, cor")
+                .in("encomenda_id", pedidos.map((pedido) => pedido.id))
+            : { data: [], error: null };
+
+        setCarregandoEntregas(false);
+
+        if (erroItens) {
+            setMensagem(`Não foi possível carregar os itens das entregas: ${erroItens.message}`);
+        }
+
+        const itens = (itensData || []) as ItemEntrega[];
+        const dispensadas = new Set(obterEntregasDispensadasHoje(obterDataHoje()));
+        setEntregasDeHoje(pedidos.filter((pedido) => !dispensadas.has(pedido.id)).map((pedido) => ({
+            ...pedido,
+            itens: itens.filter((item) => item.encomenda_id === pedido.id),
+        })));
+    }, []);
+
+    async function abrirEntregas() {
+        mudarTela("entregar");
+        setMensagem("");
+        await carregarEntregasDeHoje();
+    }
+
+    useEffect(() => {
+        let ativo = true;
+
+        const timer = window.setTimeout(() => {
+            if (ativo) void carregarEntregasDeHoje();
+        }, 0);
+
+        return () => {
+            ativo = false;
+            window.clearTimeout(timer);
+        };
+    }, [carregarEntregasDeHoje]);
+
+    function dispensarEntrega(id: string) {
+        const chave = `${entregasDispensadasStorageKey}-${obterDataHoje()}`;
+        const dispensadas = new Set(obterEntregasDispensadasHoje(obterDataHoje()));
+        dispensadas.add(id);
+        window.localStorage.setItem(chave, JSON.stringify([...dispensadas]));
+        setEntregasDeHoje((entregasAtuais) => entregasAtuais.filter((entrega) => entrega.id !== id));
     }
 
     async function removerPedido(pedido: HistoricoPedido) {
@@ -377,10 +492,7 @@ export default function Sidebar() {
                                 <p className="mt-2 text-sm text-base-content/60"></p>
                             </div>
                             <button type="button" onClick={limparEncomenda} className="trash-button btn btn-outline btn-error btn-sm shrink-0 gap-2" title="Limpar todos os campos e itens">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="size-4" aria-hidden="true">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M9 6V4h6v2m-9 0 1 14h10l1-14M10 10v6m4-6v6" />
-                                </svg>
-                                <span className="hidden sm:inline">Limpar</span>
+                                <span className="hidden sm:inline">Limpar Encomenda</span>
                             </button>
                         </div>
 
@@ -631,7 +743,7 @@ export default function Sidebar() {
                             <div className="mt-6 flex flex-col items-end gap-3 border-t border-base-300 pt-5">
                                 {mensagem && <p className={`w-full text-sm ${mensagem.includes("sucesso") ? "text-success" : "text-error"}`}>{mensagem}</p>}
                                 <button type="button" onClick={() => void salvarPedido()} disabled={salvandoPedido || pedidoSalvo} className="btn btn-secondary">
-                                    {salvandoPedido ? "Salvando..." : pedidoSalvo ? "Encomenda salva" : "Salvar encomenda"}
+                                    {salvandoPedido ? "Salvando..." : pedidoSalvo ? "Encomenda salva" : "Salvar no histórico"}
                                 </button>
                             </div>
                         </div>
@@ -643,7 +755,7 @@ export default function Sidebar() {
                                 <div>
                                     <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Pedidos salvos</p>
                                     <h1 className="mt-2 text-3xl font-bold tracking-tight text-base-content">Histórico</h1>
-                                    <p className="mt-2 text-sm text-base-content/60">Consulte as encomendas registradas no Supabase.</p>
+                                    <p className="mt-2 text-sm text-base-content/60">Consulte as encomendas registradas no banco de dados.</p>
                                 </div>
                                 <button type="button" onClick={() => void abrirHistorico()} className="btn btn-outline btn-sm">Atualizar</button>
                             </div>
@@ -657,12 +769,101 @@ export default function Sidebar() {
                                 ) : (
                                     <table className="table">
                                         <thead><tr><th>Cliente / Lanche</th><th>Entrega</th><th>Solicitante</th><th>Criado em</th><th>Ações</th></tr></thead>
-                                        <tbody>{historico.map((pedido) => <tr key={pedido.id}><td className="font-semibold">{pedido.cliente_lanche}</td><td>{formatarDataEntrega(pedido.data_entrega)}</td><td>{pedido.solicitante}</td><td>{new Date(pedido.created_at).toLocaleString("pt-BR")}</td><td><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void reimprimirPedido(pedido)} className="btn btn-sm btn-outline btn-primary gap-2 rounded-lg transition-colors" title="Reimprimir PDF" aria-label={`Reimprimir PDF de ${pedido.cliente_lanche}`}><svg className="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linejoin="round" stroke-width="2" d="M16.444 18H19a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2.556M17 11V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v6h10ZM7 15h10v4a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-4Z" />
-                                        </svg>
-                                            <span className="hidden sm:inline">Reimprimir</span></button><button type="button" onClick={() => void removerPedido(pedido)} className="btn btn-sm btn-outline btn-error gap-2 rounded-lg transition-colors" title="Apagar encomenda" aria-label={`Apagar encomenda de ${pedido.cliente_lanche}`}><span className="hidden sm:inline">Apagar</span></button></div></td></tr>)}</tbody>
+                                        <tbody>
+                                            {historico.map((pedido) => (
+                                                <tr key={pedido.id}>
+                                                    <td className="font-semibold">{pedido.cliente_lanche}</td>
+                                                    <td>{formatarDataEntrega(pedido.data_entrega)}</td>
+                                                    <td>{pedido.solicitante}</td>
+                                                    <td>{new Date(pedido.created_at).toLocaleString("pt-BR")}</td>
+                                                    <td>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <button type="button" onClick={() => void reimprimirPedido(pedido)} className="btn btn-sm btn-outline btn-primary gap-2 rounded-lg transition-colors" title="Reimprimir PDF" aria-label={`Reimprimir PDF de ${pedido.cliente_lanche}`}>
+                                                                <svg className="h-6 w-6" aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                                                                    <path stroke="currentColor" strokeLinejoin="round" strokeWidth="2" d="M16.444 18H19a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2.556M17 11V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v6h10ZM7 15h10v4a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-4Z" />
+                                                                </svg>
+                                                                <span className="hidden sm:inline">Reimprimir</span>
+                                                            </button>
+                                                            <button type="button" onClick={() => void removerPedido(pedido)} className="btn btn-sm btn-outline btn-error gap-2 rounded-lg transition-colors" title="Apagar encomenda" aria-label={`Apagar encomenda de ${pedido.cliente_lanche}`}>
+                                                                <span className="hidden sm:inline">Apagar</span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
                                     </table>
                                 )}
                             </div>
+                            {!carregandoHistorico && totalHistorico > 0 && (
+                                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-base-300 bg-base-100 px-4 py-3 text-sm shadow-sm">
+                                    <span className="text-base-content/60">Página {paginaHistorico} de {Math.ceil(totalHistorico / historicoPaginaTamanho)} · {totalHistorico} encomendas</span>
+                                    <div className="flex gap-2">
+                                        <button type="button" className="btn btn-sm btn-outline" disabled={paginaHistorico === 1} onClick={() => void carregarHistorico(paginaHistorico - 1)}>Anterior</button>
+                                        <button type="button" className="btn btn-sm btn-primary" disabled={paginaHistorico >= Math.ceil(totalHistorico / historicoPaginaTamanho)} onClick={() => void carregarHistorico(paginaHistorico + 1)}>Próxima</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {tela === "entregar" && (
+                        <div className="mx-auto max-w-6xl">
+                            <div className="mb-8 flex items-end justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Pedidos do Dia</p>
+                                    <h1 className="mt-2 text-3xl font-bold tracking-tight text-base-content">Encomendas previstas para entrega hoje.</h1>
+
+                                </div>
+                                <button type="button" onClick={() => void abrirEntregas()} className="btn btn-outline btn-sm">Atualizar</button>
+                            </div>
+
+                            {mensagem && <p className="mb-4 rounded-lg bg-error/10 p-3 text-sm text-error">{mensagem}</p>}
+                            {carregandoEntregas ? (
+                                <div className="rounded-2xl border border-base-300 bg-base-100 p-10 text-center text-sm text-base-content/60 shadow-sm">Carregando entregas...</div>
+                            ) : entregasDeHoje.length === 0 ? (
+                                <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-10 text-center shadow-sm">
+                                    <p className="font-semibold text-base-content">Nenhuma entrega para hoje</p>
+                                    <p className="mt-1 text-sm text-base-content/60">As encomendas com data de hoje aparecerão aqui.</p>
+                                </div>
+                            ) : (
+                                <div className="grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3">
+                                    {entregasDeHoje.map((pedido, indice) => (
+                                        <article key={pedido.id} className="flex h-[540px] min-h-0 flex-col rounded-2xl border border-base-300 bg-base-100 p-6 shadow-sm">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-bold text-primary">{indice + 1}</span>
+                                                <span className="rounded-full bg-base-200 px-3 py-1 text-xs font-semibold text-base-content/70">{formatarDataEntrega(pedido.data_entrega)}</span>
+                                            </div>
+                                            <h2 className="mt-5 text-xl font-bold text-base-content">{pedido.cliente_lanche}</h2>
+                                            <div className="mt-3 space-y-1 text-sm text-base-content/70">
+                                                <p><span className="font-semibold text-base-content">Solicitante:</span> {pedido.solicitante}</p>
+                                                <p><span className="font-semibold text-base-content">Criada em:</span> {new Date(pedido.created_at).toLocaleString("pt-BR")}</p>
+                                            </div>
+                                            <div className="mt-4 flex min-h-0 flex-1 flex-col border-t border-base-300 pt-3">
+                                                <p className="mb-2 shrink-0 text-xs font-semibold uppercase tracking-wide text-base-content/50">Itens</p>
+                                                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                                                    {pedido.itens.length === 0 ? (
+                                                        <p className="text-sm text-base-content/50">Nenhum item encontrado.</p>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            {pedido.itens.map((item) => (
+                                                                <div key={`${item.codigo}-${item.aro}-${item.cor}`} className="flex items-center justify-between gap-3 text-sm">
+                                                                    <span className="font-mono font-semibold text-base-content">{item.codigo} <span className="font-sans font-normal text-base-content/60">({item.gergelim ? "com" : "sem"} gergelim)</span></span>
+                                                                    <span className="text-right text-base-content/70">{item.quantidade} pac. / {item.unidade} un.<br /><span className="text-xs">Aro {item.aro} · {item.cor}</span></span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 flex min-h-[52px] shrink-0 items-start">
+                                                {pedido.observacao && <p className="w-full overflow-hidden rounded-lg bg-warning/10 px-3 py-2 text-sm text-base-content"><span className="font-semibold">Observação:</span> {pedido.observacao}</p>}
+                                            </div>
+                                            <button type="button" onClick={() => dispensarEntrega(pedido.id)} className="btn btn-outline btn-sm mt-3 w-full shrink-0">Dispensar</button>
+                                        </article>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -743,49 +944,63 @@ export default function Sidebar() {
 
             <div className="drawer-side">
                 <label htmlFor="navigation-drawer" aria-label="Fechar navegação" className="drawer-overlay" />
-                <aside className="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 p-4 text-base-content">
-                    <div className="flex items-center gap-3 border-b border-base-300 px-2 pb-5 pt-2">
-                        <div id="logo" className="grid size-10 place-items-center overflow-hidden text-primary-content">
+                <aside className="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 px-4 py-5 text-base-content shadow-xl">
+                    <div className="flex min-h-[72px] items-center gap-3 rounded-2xl px-3 py-3">
+                        <div id="logo" className="grid size-11 shrink-0 place-items-center overflow-hidden p-1">
                             <Image src="/favicon.ico" alt="Logo Conde do Pão" width={40} height={40} className="size-full object-cover" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                             <div id="text-layer" className="relative h-6 w-36">
                                 <Image src="/textlayer.webp" alt="Conde do Pão" fill sizes="144px" className="object-contain object-left" />
                             </div>
-                            <p className="text-xs text-base-content/60">Pedido de Brioches</p>
+                            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-base-content/55">Pedido de  Brioches</p>
                         </div>
                     </div>
 
-                    <nav className="mt-6 flex-1" aria-label="Navegação principal">
-                        <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                            Menu principal
-                        </p>
-                        <ul className="menu gap-2 p-0">
+                    <nav className="mt-8 flex-1 px-1" aria-label="Navegação principal">
+                        <p className="px-3 pb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-base-content/45">Operação</p>
+                        <ul className="menu gap-1.5 p-0">
                             <li>
-                                <Link href="/" onClick={() => setTela("inicio")} className="active:bg-primary active:text-primary-content">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="size-6 text-primary" fill="currentColor" aria-hidden="true"><path d="M240-200h120v-240h240v240h120v-360L480-740 240-560v360Zm-80 80v-480l320-240 320 240v480H520v-240h-80v240H160Zm320-350Z" /></svg>
-                                    <span>Início</span>
-                                    <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">Encomendas</span>
+                                <Link href="/" onClick={() => mudarTela("inicio")} className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "inicio" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
+                                    <svg className="fill-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="24px" width="24px" fill="#EA3323"><path d="M5,21q-0.83,0-1.41-0.59T3,19V5Q3,4.17 3.59,3.59T5,3H9.2q0.32-0.9 1.09-1.45T12,1t1.71,0.55T14.8,3H19q0.83,0 1.41,0.59T21,5V19q0,0.82-0.59,1.41T19,21H5Zm0-2H19V5H5V19Zm2-2h7V15H7v2Zm0-4H17V11H7v2ZM7,9H17V7H7V9Zm5.54-4.96q0.21-0.21 0.21-0.54q0-0.33-0.21-0.54T12,2.75T11.46,2.96T11.25,3.5q0,0.32 0.21,0.54T12,4.25t0.54-0.21ZM5,19V5V19Z" /></svg>
+                                    <span>Encomendar</span>
+                                    <svg className="ml-auto size-[18px] opacity-50" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m9.29 6.71 1.42-1.42L16.42 11a1.4 1.4 0 0 1 0 2l-5.71 5.71-1.42-1.42L13.59 12 9.29 6.71Z" /></svg>
                                 </Link>
                             </li>
                             <li>
-                                <a href="#historico" onClick={(event) => { event.preventDefault(); void abrirHistorico(); }}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="size-6 text-primary" fill="currentColor" aria-hidden="true"><path d="M480-120q-138 0-240.5-91.5T122-440h82q14 104 92.5 172T480-200q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h110v80H120v-240h80v94q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm112-192L440-464v-216h80v184l128 128-56 56Z" /></svg>
-                                    <span>Histórico</span>
+                                <a href="#entregar" onClick={(event) => { event.preventDefault(); void abrirEntregas(); }} className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "entregar" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
+                                    <svg className="fill-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="24px" width="24px" fill="#EA3323"><path d="M6,22q-0.82,0-1.41-0.59T4,20V8Q4,7.18 4.59,6.59T6,6H8Q8,4.35 9.18,3.17T12,2t2.83,1.17T16,6h2q0.82,0 1.41,0.59Q20,7.18 20,8V20q0,0.82-0.59,1.41T18,22H6Zm0-2H18V8H16v2q0,0.42-0.29,0.71T15,11t-0.71-0.29Q14,10.43 14,10V8H10v2q0,0.42-0.29,0.71T9,11q-0.42,0-0.71-0.29Q8,10.43 8,10V8H6V20ZM10,6h4q0-0.82-0.59-1.41T12,4T10.59,4.59Q10,5.18 10,6ZM6,20V8V20Z" /></svg>
+                                    <span>Entregar</span>
+                                    <span className="ml-auto grid size-6 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-content">{entregasDeHoje.length}</span>
                                 </a>
                             </li>
                             <li>
-                                <a href="#configuracoes" onClick={(event) => { event.preventDefault(); setTela("configuracoes"); }}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" className="size-6 text-primary" fill="currentColor" aria-hidden="true"><path d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm70-80h79l14-106q31-8 57.5-23.5T639-327l99 41 39-68-86-65q5-14 7-29.5t2-31.5q0-16-2-31.5t-7-29.5l86-65-39-68-99 42q-22-23-48.5-38.5T533-694l-13-106h-79l-14 106q-31 8-57.5 23.5T321-633l-99-41-39 68 86 64q-5 15-7 30t-2 32q0 16 2 31t7 30l-86 65 39 68 99-42q22 23 48.5 38.5T427-266l13 106Zm42-180q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Zm-2-140Z" /></svg>
+                                <a href="#historico" onClick={(event) => { event.preventDefault(); void abrirHistorico(); }} className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "historico" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
+                                    <svg className="fill-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="24px" width="24px" fill="#EA3323"><path d="M12,21q-3.45,0-6.01-2.29Q3.43,16.43 3.05,13H5.1q0.35,2.6 2.31,4.3T12,19q2.93,0 4.96-2.04Q19,14.93 19,12q0-2.93-2.04-4.96T12,5Q10.28,5 8.78,5.8T6.25,8H9v2H3V4H5V6.35q1.28-1.6 3.11-2.47T12,3q1.88,0 3.51,0.71t2.85,1.93t1.93,2.85T21,12t-0.71,3.51t-1.93,2.85t-2.85,1.93T12,21Zm2.8-4.8L11,12.4V7h2v4.6l3.2,3.2l-1.4,1.4Z" /></svg>
+                                    <span>Histórico</span>
+                                    <svg className="ml-auto size-[18px] opacity-50" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m9.29 6.71 1.42-1.42L16.42 11a1.4 1.4 0 0 1 0 2l-5.71 5.71-1.42-1.42L13.59 12 9.29 6.71Z" /></svg>
+                                </a>
+                            </li>
+                        </ul>
+
+                        <p className="mt-8 px-3 pb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-base-content/45">Sistema</p>
+                        <ul className="menu gap-1.5 p-0">
+                            <li>
+                                <a href="#configuracoes" onClick={(event) => { event.preventDefault(); mudarTela("configuracoes"); }} className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "configuracoes" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
+                                    <svg className="fill-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="24px" width="24px" fill="#EA3323"><path d="M9.25,22l-0.4-3.2q-0.32-0.13-0.61-0.3T7.68,18.13L4.7,19.38L1.95,14.63l2.58-1.95Q4.5,12.5 4.5,12.34q0-0.16 0-0.34t0-0.34t0.03-0.34L1.95,9.38L4.7,4.63L7.68,5.88Q7.95,5.68 8.25,5.5t0.6-0.3L9.25,2h5.5l0.4,3.2q0.33,0.13 0.61,0.3t0.56,0.38L19.3,4.63l2.75,4.75l-2.57,1.95q0.02,0.18 0.02,0.34t0,0.34t0,0.34t-0.05,0.34l2.57,1.95l-2.75,4.75l-2.95-1.25q-0.27,0.2-0.57,0.38t-0.6,0.3L14.75,22H9.25ZM11,20h1.98l0.35-2.65q0.78-0.2 1.44-0.59t1.21-0.94l2.47,1.03l0.98-1.7l-2.15-1.63q0.13-0.35 0.17-0.74T17.5,12t-0.05-0.79q-0.05-0.39-0.17-0.74l2.15-1.63l-0.98-1.7L15.98,8.2q-0.55-0.57-1.21-0.96T13.33,6.65L13,4H11.03L10.68,6.65Q9.9,6.85 9.24,7.24T8.03,8.17L5.55,7.15L4.58,8.85l2.15,1.6Q6.6,10.83 6.55,11.2T6.5,12q0,0.4 0.05,0.77t0.17,0.75L4.58,15.15l0.98,1.7L8.03,15.8q0.55,0.58 1.21,0.96t1.44,0.59L11,20Zm1.05-4.5q1.45,0 2.47-1.03T15.55,12T14.53,9.52T12.05,8.5q-1.47,0-2.49,1.02T8.55,12t1.01,2.47t2.49,1.03ZM12,12Z" /></svg>
                                     <span>Configurações</span>
+                                    <svg className="ml-auto size-[18px] opacity-50" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m9.29 6.71 1.42-1.42L16.42 11a1.4 1.4 0 0 1 0 2l-5.71 5.71-1.42-1.42L13.59 12 9.29 6.71Z" /></svg>
                                 </a>
                             </li>
                         </ul>
                     </nav>
 
-                    <div className="rounded-xl bg-base-200 p-3 text-xs text-base-content/60">
-                        <p className="font-semibold text-base-content">Caixa de Expedição</p>
-                        <p className="mt-1">Panificadora Conde LTDA - Matriz</p>
+                    <div className="mt-6 rounded-2xl border border-base-300 bg-base-200/60 p-4 text-xs text-base-content/60">
+                        <div className="flex items-center gap-2 text-success">
+                            <svg className="size-[18px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 4H5c-1.1 0-2 .9-2 2v2h18V6c0-1.1-.9-2-2-2ZM3 10v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-8H3Zm4 7H5v-2h2v2Zm0-3H5v-2h2v2Zm3 3H8v-2h2v2Zm0-3H8v-2h2v2Z" /></svg>
+                            <p className="font-semibold text-base-content">Caixa de Expedição</p>
+                        </div>
+                        <p className="mt-2 leading-relaxed">Panificadora Conde LTDA - Matriz</p>
                     </div>
                 </aside>
             </div>

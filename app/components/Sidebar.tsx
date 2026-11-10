@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ThreeDot } from "react-loading-indicators";
 import EncomendaA4, { EncomendaA4Item } from "./EncomendaA4";
 import { supabase } from "../../lib/supabase";
 
@@ -39,8 +40,21 @@ type Reimpressao = {
     itens: EncomendaA4Item[];
 };
 
+type EncomendaRascunho = {
+    cliente: string;
+    dataEntrega: string;
+    solicitante: string;
+    observacao: string;
+    gergelim: boolean;
+    pacotes: number;
+    aro: "60" | "80";
+    cor: string;
+    itens: BriocheItem[];
+};
+
 const cores = ["Tradicional", "Vermelho", "Verde", "Azul", "Amarelo", "Mesclado"];
-const quantidades = Array.from({ length: 34 }, (_, index) => index + 1);
+const maxPacotes = 34;
+const quantidades = Array.from({ length: maxPacotes }, (_, index) => index + 1);
 const clientesPredefinidos = [
     "MAIS KI GOSTOSO",
     "COMBINADOS LANCHE",
@@ -53,7 +67,11 @@ const solicitantesPredefinidos = ["Fernanda", "Cristian", "Diana"];
 const solicitantesStorageKey = "brioches-solicitantes-sugeridos";
 const telaStorageKey = "brioches-ultima-tela";
 const entregasDispensadasStorageKey = "brioches-entregas-dispensadas";
+const encomendaRascunhoStorageKey = "brioches-encomenda-rascunho";
 const historicoPaginaTamanho = 10;
+const duracaoCacheMs = 30_000;
+const historicoCache = new Map<number, { data: HistoricoPedido[]; total: number; expiraEm: number }>();
+const entregasCache = new Map<string, { data: EntregaHoje[]; expiraEm: number }>();
 const coresAcento = [
     { nome: "Azul", valor: "#2563eb" },
     { nome: "Verde", valor: "#16a34a" },
@@ -93,6 +111,11 @@ function obterEntregasDispensadasHoje(dataHoje: string) {
     }
 }
 
+function invalidarCacheDePedidos() {
+    historicoCache.clear();
+    entregasCache.clear();
+}
+
 export default function Sidebar() {
     const [cliente, setCliente] = useState("");
     const [dataEntrega, setDataEntrega] = useState("");
@@ -108,16 +131,15 @@ export default function Sidebar() {
     const [paginaHistorico, setPaginaHistorico] = useState(1);
     const [totalHistorico, setTotalHistorico] = useState(0);
     const [entregasDeHoje, setEntregasDeHoje] = useState<EntregaHoje[]>([]);
-    const [salvandoPedido, setSalvandoPedido] = useState(false);
     const [pedidoSalvo, setPedidoSalvo] = useState(false);
     const [carregandoHistorico, setCarregandoHistorico] = useState(false);
     const [carregandoEntregas, setCarregandoEntregas] = useState(false);
     const [mensagem, setMensagem] = useState("");
     const [temaEscuro, setTemaEscuro] = useState(false);
-    const [salvamentoAutomatico, setSalvamentoAutomatico] = useState(true);
     const [corAcento, setCorAcento] = useState("#dc2626");
     const [reimpressao, setReimpressao] = useState<Reimpressao | null>(null);
     const reimpressaoSequencia = useRef(0);
+    const rascunhoCarregado = useRef(false);
     const [clientesSugeridos, setClientesSugeridos] = useState(clientesPredefinidos);
     const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
     const [sugestaoSelecionada, setSugestaoSelecionada] = useState(-1);
@@ -129,16 +151,32 @@ export default function Sidebar() {
         const timer = window.setTimeout(() => {
             const telaSalva = window.localStorage.getItem(telaStorageKey);
             const temaSalvo = window.localStorage.getItem("brioches-tema") === "escuro";
-            const salvamentoSalvo = window.localStorage.getItem("brioches-salvamento") !== "desativado";
             const corSalva = window.localStorage.getItem("brioches-cor-acento") || "#dc2626";
             const clientesSalvos = window.localStorage.getItem(clientesStorageKey);
             const solicitantesSalvos = window.localStorage.getItem(solicitantesStorageKey);
+            const rascunhoSalvo = window.localStorage.getItem(encomendaRascunhoStorageKey);
             setTemaEscuro(temaSalvo);
             if (telaSalva === "inicio" || telaSalva === "entregar" || telaSalva === "historico" || telaSalva === "configuracoes") {
                 setTela(telaSalva);
             }
-            setSalvamentoAutomatico(salvamentoSalvo);
             setCorAcento(corSalva);
+            if (rascunhoSalvo) {
+                try {
+                    const rascunho = JSON.parse(rascunhoSalvo) as Partial<EncomendaRascunho>;
+                    setCliente(typeof rascunho.cliente === "string" ? rascunho.cliente : "");
+                    setDataEntrega(typeof rascunho.dataEntrega === "string" ? rascunho.dataEntrega : "");
+                    setSolicitante(typeof rascunho.solicitante === "string" ? rascunho.solicitante : "");
+                    setObservacao(typeof rascunho.observacao === "string" ? rascunho.observacao : "");
+                    setGergelim(typeof rascunho.gergelim === "boolean" ? rascunho.gergelim : true);
+                    setPacotes(typeof rascunho.pacotes === "number" ? Math.min(Math.max(rascunho.pacotes, 1), maxPacotes) : 1);
+                    setAro(rascunho.aro === "60" || rascunho.aro === "80" ? rascunho.aro : "80");
+                    setCor(typeof rascunho.cor === "string" ? rascunho.cor : cores[0]);
+                    setItens(Array.isArray(rascunho.itens) ? rascunho.itens : []);
+                } catch {
+                    window.localStorage.removeItem(encomendaRascunhoStorageKey);
+                }
+            }
+            rascunhoCarregado.current = true;
             if (clientesSalvos) {
                 try {
                     const clientes = JSON.parse(clientesSalvos);
@@ -170,6 +208,28 @@ export default function Sidebar() {
         return () => window.clearTimeout(timer);
     }, []);
 
+    useEffect(() => {
+        if (!rascunhoCarregado.current) return;
+
+        if (!cliente && !dataEntrega && !solicitante && !observacao && itens.length === 0) {
+            window.localStorage.removeItem(encomendaRascunhoStorageKey);
+            return;
+        }
+
+        const rascunho: EncomendaRascunho = {
+            cliente,
+            dataEntrega,
+            solicitante,
+            observacao,
+            gergelim,
+            pacotes,
+            aro,
+            cor,
+            itens,
+        };
+        window.localStorage.setItem(encomendaRascunhoStorageKey, JSON.stringify(rascunho));
+    }, [cliente, dataEntrega, solicitante, observacao, gergelim, pacotes, aro, cor, itens]);
+
     function mudarTela(novaTela: "inicio" | "entregar" | "historico" | "configuracoes") {
         setTela(novaTela);
         window.localStorage.setItem(telaStorageKey, novaTela);
@@ -179,11 +239,6 @@ export default function Sidebar() {
         setTemaEscuro(escuro);
         window.localStorage.setItem("brioches-tema", escuro ? "escuro" : "claro");
         document.documentElement.dataset.theme = escuro ? "brioches-dark" : "brioches-light";
-    }
-
-    function alternarSalvamento(ativado: boolean) {
-        setSalvamentoAutomatico(ativado);
-        window.localStorage.setItem("brioches-salvamento", ativado ? "ativado" : "desativado");
     }
 
     function alterarCorAcento(cor: string) {
@@ -281,6 +336,7 @@ export default function Sidebar() {
         setItens([]);
         setPedidoSalvo(false);
         setMensagem("");
+        window.localStorage.removeItem(encomendaRascunhoStorageKey);
     }
 
     async function salvarPedido(): Promise<boolean> {
@@ -297,7 +353,10 @@ export default function Sidebar() {
             return false;
         }
 
-        setSalvandoPedido(true);
+        if (itens.some((item) => item.pacotes < 1 || item.pacotes > maxPacotes)) {
+            setMensagem(`Cada item deve ter entre 1 e ${maxPacotes} pacotes.`);
+            return false;
+        }
 
         const { data: encomenda, error: erroEncomenda } = await supabase
             .from("encomendas")
@@ -311,39 +370,48 @@ export default function Sidebar() {
             .single();
 
         if (erroEncomenda || !encomenda) {
-            setSalvandoPedido(false);
             setMensagem(`Não foi possível salvar a encomenda: ${erroEncomenda?.message || "resposta inválida"}`);
             return false;
         }
 
-        const { error: erroItens } = await supabase.from("itens_encomenda").insert(
-            itens.map((item) => ({
-                encomenda_id: encomenda.id,
-                codigo: item.codigo,
-                quantidade: item.pacotes,
-                unidade: item.unidades,
-                gergelim: item.gergelim,
-                aro: item.aro,
-                cor: item.cor,
-            })),
-        );
+        const itensParaSalvar = itens.map((item) => ({
+            encomenda_id: encomenda.id,
+            codigo: item.codigo,
+            quantidade: item.pacotes,
+            unidade: item.pacotes * 12,
+            gergelim: item.gergelim,
+            aro: item.aro,
+            cor: item.cor,
+        }));
+
+        const { error: erroItens } = await supabase.from("itens_encomenda").insert(itensParaSalvar);
 
         if (erroItens) {
             await supabase.from("encomendas").delete().eq("id", encomenda.id);
-            setSalvandoPedido(false);
-            setMensagem(`A encomenda não foi concluída: ${erroItens.message}`);
+            const detalhesErro = [erroItens.message, erroItens.details, erroItens.hint].filter(Boolean).join(" ");
+            setMensagem(`A encomenda não foi concluída: ${detalhesErro || "erro ao salvar os itens"}`);
             return false;
         }
 
-        setSalvandoPedido(false);
         setPedidoSalvo(true);
         setMensagem("Encomenda salva com sucesso.");
+        window.localStorage.removeItem(encomendaRascunhoStorageKey);
+        invalidarCacheDePedidos();
         return true;
     }
 
     async function carregarHistorico(pagina: number) {
         setMensagem("");
         setCarregandoHistorico(true);
+
+        const cache = historicoCache.get(pagina);
+        if (cache && cache.expiraEm > Date.now()) {
+            setHistorico(cache.data);
+            setPaginaHistorico(pagina);
+            setTotalHistorico(cache.total);
+            setCarregandoHistorico(false);
+            return;
+        }
 
         const inicio = (pagina - 1) * historicoPaginaTamanho;
         const { data, count, error } = await supabase
@@ -362,20 +430,39 @@ export default function Sidebar() {
         setHistorico(data || []);
         setPaginaHistorico(pagina);
         setTotalHistorico(count || 0);
+        historicoCache.set(pagina, {
+            data: data || [],
+            total: count || 0,
+            expiraEm: Date.now() + duracaoCacheMs,
+        });
     }
 
     async function abrirHistorico() {
         mudarTela("historico");
-        await carregarHistorico(1);
     }
 
+    useEffect(() => {
+        if (tela !== "historico") return;
+
+        const timer = window.setTimeout(() => void carregarHistorico(1), 0);
+        return () => window.clearTimeout(timer);
+    }, [tela]);
+
     const carregarEntregasDeHoje = useCallback(async () => {
+        const dataHoje = obterDataHoje();
+        const cache = entregasCache.get(dataHoje);
         setCarregandoEntregas(true);
+
+        if (cache && cache.expiraEm > Date.now()) {
+            setEntregasDeHoje(cache.data);
+            setCarregandoEntregas(false);
+            return;
+        }
 
         const { data, error } = await supabase
             .from("encomendas")
             .select("id, cliente_lanche, data_entrega, solicitante, observacao, created_at")
-            .eq("data_entrega", obterDataHoje())
+            .eq("data_entrega", dataHoje)
             .order("created_at", { ascending: false });
 
         if (error) {
@@ -399,11 +486,13 @@ export default function Sidebar() {
         }
 
         const itens = (itensData || []) as ItemEntrega[];
-        const dispensadas = new Set(obterEntregasDispensadasHoje(obterDataHoje()));
-        setEntregasDeHoje(pedidos.filter((pedido) => !dispensadas.has(pedido.id)).map((pedido) => ({
+        const dispensadas = new Set(obterEntregasDispensadasHoje(dataHoje));
+        const entregas = pedidos.filter((pedido) => !dispensadas.has(pedido.id)).map((pedido) => ({
             ...pedido,
             itens: itens.filter((item) => item.encomenda_id === pedido.id),
-        })));
+        }));
+        entregasCache.set(dataHoje, { data: entregas, expiraEm: Date.now() + duracaoCacheMs });
+        setEntregasDeHoje(entregas);
     }, []);
 
     async function abrirEntregas() {
@@ -430,6 +519,7 @@ export default function Sidebar() {
         const dispensadas = new Set(obterEntregasDispensadasHoje(obterDataHoje()));
         dispensadas.add(id);
         window.localStorage.setItem(chave, JSON.stringify([...dispensadas]));
+        entregasCache.delete(obterDataHoje());
         setEntregasDeHoje((entregasAtuais) => entregasAtuais.filter((entrega) => entrega.id !== id));
     }
 
@@ -445,6 +535,7 @@ export default function Sidebar() {
             return;
         }
 
+        invalidarCacheDePedidos();
         setHistorico((pedidosAtuais) => pedidosAtuais.filter((pedidoAtual) => pedidoAtual.id !== pedido.id));
         setMensagem("Encomenda apagada com sucesso.");
     }
@@ -723,7 +814,7 @@ export default function Sidebar() {
                         <div className="mt-8 rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm lg:p-7">
                             <div className="mb-5">
                                 <h2 className="font-bold">Ficha da encomenda</h2>
-                                <p className="mt-1 text-sm text-base-content/60">Gere o PDF A4 com os dados preenchidos acima.</p>
+                                <p className="mt-1 text-sm text-base-content/60">Imprimir a ficha com os dados preenchidos acima.</p>
                             </div>
                             <EncomendaA4
                                 clienteLanche={cliente}
@@ -738,14 +829,8 @@ export default function Sidebar() {
                                     aro: item.aro,
                                     cor: item.cor,
                                 }))}
-                                onSalvar={salvamentoAutomatico ? salvarPedido : undefined}
+                                onSalvar={salvarPedido}
                             />
-                            <div className="mt-6 flex flex-col items-end gap-3 border-t border-base-300 pt-5">
-                                {mensagem && <p className={`w-full text-sm ${mensagem.includes("sucesso") ? "text-success" : "text-error"}`}>{mensagem}</p>}
-                                <button type="button" onClick={() => void salvarPedido()} disabled={salvandoPedido || pedidoSalvo} className="btn btn-secondary">
-                                    {salvandoPedido ? "Salvando..." : pedidoSalvo ? "Encomenda salva" : "Salvar no histórico"}
-                                </button>
-                            </div>
                         </div>
                     </div>}
 
@@ -763,7 +848,9 @@ export default function Sidebar() {
                             {mensagem && <p className="mb-4 rounded-lg bg-error/10 p-3 text-sm text-error">{mensagem}</p>}
                             <div className="overflow-x-auto rounded-2xl border border-base-300 bg-base-100 shadow-sm">
                                 {carregandoHistorico ? (
-                                    <div className="p-8 text-center text-sm text-base-content/60">Carregando histórico...</div>
+                                    <div className="flex min-h-40 items-center justify-center p-8" aria-label="Carregando histórico">
+                                        <ThreeDot color={corAcento} size="medium" text="" textColor="" />
+                                    </div>
                                 ) : historico.length === 0 ? (
                                     <div className="p-8 text-center text-sm text-base-content/60">Nenhuma encomenda salva.</div>
                                 ) : (
@@ -820,7 +907,9 @@ export default function Sidebar() {
 
                             {mensagem && <p className="mb-4 rounded-lg bg-error/10 p-3 text-sm text-error">{mensagem}</p>}
                             {carregandoEntregas ? (
-                                <div className="rounded-2xl border border-base-300 bg-base-100 p-10 text-center text-sm text-base-content/60 shadow-sm">Carregando entregas...</div>
+                                <div className="flex min-h-56 items-center justify-center rounded-2xl border border-base-300 bg-base-100 p-10 shadow-sm" aria-label="Carregando entregas">
+                                    <ThreeDot color={corAcento} size="medium" text="" textColor="" />
+                                </div>
                             ) : entregasDeHoje.length === 0 ? (
                                 <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-10 text-center shadow-sm">
                                     <p className="font-semibold text-base-content">Nenhuma entrega para hoje</p>
@@ -910,13 +999,6 @@ export default function Sidebar() {
                                     <input type="checkbox" className="toggle toggle-primary" checked={temaEscuro} onChange={(event) => alternarTema(event.target.checked)} />
                                 </label>
 
-                                <label className="flex cursor-pointer items-center justify-between gap-4 border-t border-base-300 py-5">
-                                    <span>
-                                        <span className="block font-medium">Salvar automaticamente</span>
-                                        <span className="mt-1 block text-sm text-base-content/60">Salva a encomenda no histórico antes de gerar o PDF.</span>
-                                    </span>
-                                    <input type="checkbox" className="toggle toggle-primary" checked={salvamentoAutomatico} onChange={(event) => alternarSalvamento(event.target.checked)} />
-                                </label>
                             </section>
 
                             <p className="mt-8 text-center text-xs text-base-content/50">
@@ -953,7 +1035,7 @@ export default function Sidebar() {
                             <div id="text-layer" className="relative h-6 w-36">
                                 <Image src="/textlayer.webp" alt="Conde do Pão" fill sizes="144px" className="object-contain object-left" />
                             </div>
-                            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-base-content/55">Pedido de  Brioches</p>
+                            <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.12em] text-base-content/55">Brioche encomendas</p>
                         </div>
                     </div>
 

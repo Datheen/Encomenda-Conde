@@ -567,6 +567,8 @@ export default function Sidebar() {
         });
     }
 
+    const encomendaPreenchida = Boolean(cliente.trim() || dataEntrega || solicitante.trim() || observacao.trim() || itens.length > 0);
+
     return (
         <div className="drawer min-h-screen bg-base-200 lg:drawer-open">
             <input id="navigation-drawer" type="checkbox" className="drawer-toggle" />
@@ -576,14 +578,15 @@ export default function Sidebar() {
 
                 <main className="flex-1 p-4 lg:p-8">
                     {tela === "inicio" && <div className="mx-auto max-w-6xl">
-                        <div className="mb-8 flex items-start justify-between gap-4">
+                        <div className="mobile-order-header mb-8 flex items-start justify-between gap-4">
                             <div>
                                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary">Nova encomenda</p>
                                 <h1 className="mt-2 text-3xl font-bold tracking-tight text-base-content">Preencha os dados e adicione os itens do pedido.</h1>
                                 <p className="mt-2 text-sm text-base-content/60"></p>
                             </div>
-                            <button type="button" onClick={limparEncomenda} className="trash-button btn btn-outline btn-error btn-sm shrink-0 gap-2" title="Limpar todos os campos e itens">
-                                <span className="hidden sm:inline">Limpar Encomenda</span>
+                            <button type="button" onClick={limparEncomenda} disabled={!encomendaPreenchida} className="trash-button mobile-clear-button btn btn-outline btn-error btn-sm shrink-0 gap-2" title="Limpar todos os campos e itens" aria-label="Limpar encomenda">
+                                <svg className="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM8 9h8v10H8V9Zm7.5-5-1-1h-5l-1 1H5v2h14V4h-3.5Z" /></svg>
+                                <span>Limpar Encomenda</span>
                             </button>
                         </div>
 
@@ -846,7 +849,7 @@ export default function Sidebar() {
                             </div>
 
                             {mensagem && <p className="mb-4 rounded-lg bg-error/10 p-3 text-sm text-error">{mensagem}</p>}
-                            <div className="overflow-x-auto rounded-2xl border border-base-300 bg-base-100 shadow-sm">
+                            <div className="history-table-shell overflow-x-auto rounded-2xl border border-base-300 bg-base-100 shadow-sm">
                                 {carregandoHistorico ? (
                                     <div className="flex min-h-40 items-center justify-center p-8" aria-label="Carregando histórico">
                                         <ThreeDot color={corAcento} size="medium" text="" textColor="" />
@@ -854,17 +857,17 @@ export default function Sidebar() {
                                 ) : historico.length === 0 ? (
                                     <div className="p-8 text-center text-sm text-base-content/60">Nenhuma encomenda salva.</div>
                                 ) : (
-                                    <table className="table">
+                                    <table className="history-table table">
                                         <thead><tr><th>Cliente / Lanche</th><th>Entrega</th><th>Solicitante</th><th>Criado em</th><th>Ações</th></tr></thead>
                                         <tbody>
                                             {historico.map((pedido) => (
-                                                <tr key={pedido.id}>
-                                                    <td className="font-semibold">{pedido.cliente_lanche}</td>
-                                                    <td>{formatarDataEntrega(pedido.data_entrega)}</td>
-                                                    <td>{pedido.solicitante}</td>
-                                                    <td>{new Date(pedido.created_at).toLocaleString("pt-BR")}</td>
-                                                    <td>
-                                                        <div className="flex flex-wrap gap-2">
+                                                <tr key={pedido.id} className="history-row">
+                                                    <td data-label="Cliente / Lanche" className="font-semibold">{pedido.cliente_lanche}</td>
+                                                    <td data-label="Entrega">{formatarDataEntrega(pedido.data_entrega)}</td>
+                                                    <td data-label="Solicitante">{pedido.solicitante}</td>
+                                                    <td data-label="Criado em">{new Date(pedido.created_at).toLocaleString("pt-BR")}</td>
+                                                    <td data-label="Ações">
+                                                        <div className="history-actions flex flex-wrap gap-2">
                                                             <button type="button" onClick={() => void reimprimirPedido(pedido)} className="btn btn-sm btn-outline btn-primary gap-2 rounded-lg transition-colors" title="Reimprimir PDF" aria-label={`Reimprimir PDF de ${pedido.cliente_lanche}`}>
                                                                 <svg className="h-6 w-6" aria-hidden="true" viewBox="0 0 24 24" fill="none">
                                                                     <path stroke="currentColor" strokeLinejoin="round" strokeWidth="2" d="M16.444 18H19a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2.556M17 11V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v6h10ZM7 15h10v4a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-4Z" />
@@ -872,6 +875,7 @@ export default function Sidebar() {
                                                                 <span className="hidden sm:inline">Reimprimir</span>
                                                             </button>
                                                             <button type="button" onClick={() => void removerPedido(pedido)} className="btn btn-sm btn-outline btn-error gap-2 rounded-lg transition-colors" title="Apagar encomenda" aria-label={`Apagar encomenda de ${pedido.cliente_lanche}`}>
+                                                                <svg className="size-5 sm:hidden" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12ZM8 9h8v10H8V9Zm7.5-5-1-1h-5l-1 1H5v2h14V4h-3.5Z" /></svg>
                                                                 <span className="hidden sm:inline">Apagar</span>
                                                             </button>
                                                         </div>
@@ -1024,9 +1028,9 @@ export default function Sidebar() {
                 </main>
             </div>
 
-            <div className="drawer-side">
+            <div className="drawer-side mobile-navigation">
                 <label htmlFor="navigation-drawer" aria-label="Fechar navegação" className="drawer-overlay" />
-                <aside className="flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 px-4 py-5 text-base-content shadow-xl">
+                <aside className="mobile-navigation-aside flex min-h-full w-72 flex-col border-r border-base-300 bg-base-100 px-4 py-5 text-base-content shadow-xl">
                     <div className="flex min-h-[72px] items-center gap-3 rounded-2xl px-3 py-3">
                         <div id="logo" className="grid size-11 shrink-0 place-items-center overflow-hidden p-1">
                             <Image src="/favicon.ico" alt="Logo Conde do Pão" width={40} height={40} className="size-full object-cover" />
@@ -1043,24 +1047,24 @@ export default function Sidebar() {
                         <p className="px-3 pb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-base-content/45">Operação</p>
                         <ul className="menu gap-1.5 p-0">
                             <li>
-                                <Link href="/" onClick={() => mudarTela("inicio")} className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "inicio" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
+                                <Link href="/" onClick={() => mudarTela("inicio")} aria-label="Encomendar" className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "inicio" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
                                     <svg className="fill-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="24px" width="24px" fill="#EA3323"><path d="M5,21q-0.83,0-1.41-0.59T3,19V5Q3,4.17 3.59,3.59T5,3H9.2q0.32-0.9 1.09-1.45T12,1t1.71,0.55T14.8,3H19q0.83,0 1.41,0.59T21,5V19q0,0.82-0.59,1.41T19,21H5Zm0-2H19V5H5V19Zm2-2h7V15H7v2Zm0-4H17V11H7v2ZM7,9H17V7H7V9Zm5.54-4.96q0.21-0.21 0.21-0.54q0-0.33-0.21-0.54T12,2.75T11.46,2.96T11.25,3.5q0,0.32 0.21,0.54T12,4.25t0.54-0.21ZM5,19V5V19Z" /></svg>
-                                    <span>Encomendar</span>
-                                    <svg className="ml-auto size-[18px] opacity-50" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m9.29 6.71 1.42-1.42L16.42 11a1.4 1.4 0 0 1 0 2l-5.71 5.71-1.42-1.42L13.59 12 9.29 6.71Z" /></svg>
+                                    <span className="nav-label">Encomendar</span>
+                                    <svg className="nav-chevron ml-auto size-[18px] opacity-50" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m9.29 6.71 1.42-1.42L16.42 11a1.4 1.4 0 0 1 0 2l-5.71 5.71-1.42-1.42L13.59 12 9.29 6.71Z" /></svg>
                                 </Link>
                             </li>
                             <li>
-                                <a href="#entregar" onClick={(event) => { event.preventDefault(); void abrirEntregas(); }} className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "entregar" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
+                                <a href="#entregar" onClick={(event) => { event.preventDefault(); void abrirEntregas(); }} aria-label="Entregar" className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "entregar" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
                                     <svg className="fill-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="24px" width="24px" fill="#EA3323"><path d="M6,22q-0.82,0-1.41-0.59T4,20V8Q4,7.18 4.59,6.59T6,6H8Q8,4.35 9.18,3.17T12,2t2.83,1.17T16,6h2q0.82,0 1.41,0.59Q20,7.18 20,8V20q0,0.82-0.59,1.41T18,22H6Zm0-2H18V8H16v2q0,0.42-0.29,0.71T15,11t-0.71-0.29Q14,10.43 14,10V8H10v2q0,0.42-0.29,0.71T9,11q-0.42,0-0.71-0.29Q8,10.43 8,10V8H6V20ZM10,6h4q0-0.82-0.59-1.41T12,4T10.59,4.59Q10,5.18 10,6ZM6,20V8V20Z" /></svg>
-                                    <span>Entregar</span>
-                                    <span className="ml-auto grid size-6 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-content">{entregasDeHoje.length}</span>
+                                    <span className="nav-label">Entregar</span>
+                                    {entregasDeHoje.length > 0 && <span className="nav-badge ml-auto grid size-6 place-items-center rounded-full bg-primary text-[11px] font-bold text-primary-content">{entregasDeHoje.length}</span>}
                                 </a>
                             </li>
                             <li>
-                                <a href="#historico" onClick={(event) => { event.preventDefault(); void abrirHistorico(); }} className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "historico" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
+                                <a href="#historico" onClick={(event) => { event.preventDefault(); void abrirHistorico(); }} aria-label="Histórico" className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "historico" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
                                     <svg className="fill-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="24px" width="24px" fill="#EA3323"><path d="M12,21q-3.45,0-6.01-2.29Q3.43,16.43 3.05,13H5.1q0.35,2.6 2.31,4.3T12,19q2.93,0 4.96-2.04Q19,14.93 19,12q0-2.93-2.04-4.96T12,5Q10.28,5 8.78,5.8T6.25,8H9v2H3V4H5V6.35q1.28-1.6 3.11-2.47T12,3q1.88,0 3.51,0.71t2.85,1.93t1.93,2.85T21,12t-0.71,3.51t-1.93,2.85t-2.85,1.93T12,21Zm2.8-4.8L11,12.4V7h2v4.6l3.2,3.2l-1.4,1.4Z" /></svg>
-                                    <span>Histórico</span>
-                                    <svg className="ml-auto size-[18px] opacity-50" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m9.29 6.71 1.42-1.42L16.42 11a1.4 1.4 0 0 1 0 2l-5.71 5.71-1.42-1.42L13.59 12 9.29 6.71Z" /></svg>
+                                    <span className="nav-label">Histórico</span>
+                                    <svg className="nav-chevron ml-auto size-[18px] opacity-50" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m9.29 6.71 1.42-1.42L16.42 11a1.4 1.4 0 0 1 0 2l-5.71 5.71-1.42-1.42L13.59 12 9.29 6.71Z" /></svg>
                                 </a>
                             </li>
                         </ul>
@@ -1068,10 +1072,10 @@ export default function Sidebar() {
                         <p className="mt-8 px-3 pb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-base-content/45">Sistema</p>
                         <ul className="menu gap-1.5 p-0">
                             <li>
-                                <a href="#configuracoes" onClick={(event) => { event.preventDefault(); mudarTela("configuracoes"); }} className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "configuracoes" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
+                                <a href="#configuracoes" onClick={(event) => { event.preventDefault(); mudarTela("configuracoes"); }} aria-label="Configurações" className={`flex min-h-12 items-center rounded-xl px-3 py-3 ${tela === "configuracoes" ? "bg-primary/10 font-semibold text-primary" : "text-base-content/70 hover:bg-base-200"}`}>
                                     <svg className="fill-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="24px" width="24px" fill="#EA3323"><path d="M9.25,22l-0.4-3.2q-0.32-0.13-0.61-0.3T7.68,18.13L4.7,19.38L1.95,14.63l2.58-1.95Q4.5,12.5 4.5,12.34q0-0.16 0-0.34t0-0.34t0.03-0.34L1.95,9.38L4.7,4.63L7.68,5.88Q7.95,5.68 8.25,5.5t0.6-0.3L9.25,2h5.5l0.4,3.2q0.33,0.13 0.61,0.3t0.56,0.38L19.3,4.63l2.75,4.75l-2.57,1.95q0.02,0.18 0.02,0.34t0,0.34t0,0.34t-0.05,0.34l2.57,1.95l-2.75,4.75l-2.95-1.25q-0.27,0.2-0.57,0.38t-0.6,0.3L14.75,22H9.25ZM11,20h1.98l0.35-2.65q0.78-0.2 1.44-0.59t1.21-0.94l2.47,1.03l0.98-1.7l-2.15-1.63q0.13-0.35 0.17-0.74T17.5,12t-0.05-0.79q-0.05-0.39-0.17-0.74l2.15-1.63l-0.98-1.7L15.98,8.2q-0.55-0.57-1.21-0.96T13.33,6.65L13,4H11.03L10.68,6.65Q9.9,6.85 9.24,7.24T8.03,8.17L5.55,7.15L4.58,8.85l2.15,1.6Q6.6,10.83 6.55,11.2T6.5,12q0,0.4 0.05,0.77t0.17,0.75L4.58,15.15l0.98,1.7L8.03,15.8q0.55,0.58 1.21,0.96t1.44,0.59L11,20Zm1.05-4.5q1.45,0 2.47-1.03T15.55,12T14.53,9.52T12.05,8.5q-1.47,0-2.49,1.02T8.55,12t1.01,2.47t2.49,1.03ZM12,12Z" /></svg>
-                                    <span>Configurações</span>
-                                    <svg className="ml-auto size-[18px] opacity-50" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m9.29 6.71 1.42-1.42L16.42 11a1.4 1.4 0 0 1 0 2l-5.71 5.71-1.42-1.42L13.59 12 9.29 6.71Z" /></svg>
+                                    <span className="nav-label">Configurações</span>
+                                    <svg className="nav-chevron ml-auto size-[18px] opacity-50" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m9.29 6.71 1.42-1.42L16.42 11a1.4 1.4 0 0 1 0 2l-5.71 5.71-1.42-1.42L13.59 12 9.29 6.71Z" /></svg>
                                 </a>
                             </li>
                         </ul>

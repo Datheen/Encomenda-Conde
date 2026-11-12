@@ -13,6 +13,201 @@
 	transform: rotate(8deg) scale(0.92);
 }
 
+@media (max-width: 1023px) {
+	.drawer-content {
+		padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+	}
+
+	.mobile-navigation {
+		position: fixed !important;
+		inset: auto 0 0 !important;
+		z-index: 40;
+		display: block !important;
+		visibility: visible !important;
+		width: 100%;
+		height: calc(4.5rem + env(safe-area-inset-bottom));
+		pointer-events: auto !important;
+		transform: none !important;
+		opacity: 1 !important;
+	}
+
+	.mobile-navigation .drawer-overlay {
+		display: none;
+	}
+
+	.mobile-navigation-aside {
+		min-height: 0 !important;
+		width: 100% !important;
+		height: 100%;
+		flex-direction: row !important;
+		align-items: stretch;
+		border-right: 0;
+		border-top: 1px solid var(--color-base-300);
+		padding: 0.5rem 0.75rem env(safe-area-inset-bottom);
+		box-shadow: 0 -8px 24px rgb(0 0 0 / 0.08);
+		translate: none !important;
+	}
+
+	.mobile-navigation-aside > div:first-child,
+	.mobile-navigation-aside > div:last-child,
+	.mobile-navigation-aside nav > p {
+		display: none;
+	}
+
+	.mobile-navigation-aside nav {
+		width: 100%;
+		margin-top: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		align-items: stretch;
+		gap: 0;
+	}
+
+	.mobile-navigation-aside nav > ul {
+		display: contents;
+	}
+
+	.mobile-navigation-aside nav > ul > li {
+		min-width: 0;
+	}
+
+	.mobile-navigation-aside nav a {
+		position: relative;
+		width: 100%;
+		min-height: 3.25rem;
+		justify-content: center;
+		gap: 0.25rem;
+		padding: 0.35rem;
+	}
+
+	.mobile-navigation-aside .nav-label,
+	.mobile-navigation-aside .nav-chevron {
+		display: none;
+	}
+
+	.mobile-navigation-aside .nav-badge {
+		position: absolute;
+		top: 0.1rem;
+		right: 0.85rem;
+		margin: 0;
+	}
+
+	.mobile-clear-button {
+		position: static;
+		width: auto;
+		height: 2.25rem;
+		min-height: 2.25rem;
+		padding: 0 0.75rem;
+		border-radius: 0.5rem;
+		border-color: var(--color-primary);
+		background-color: var(--color-primary);
+		color: var(--color-primary-content);
+		opacity: 1;
+	}
+
+	.mobile-order-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+
+	.mobile-order-header > div:first-child {
+		min-width: 0;
+	}
+
+	.mobile-order-header h1 {
+		font-size: 1.5rem;
+		line-height: 1.2;
+	}
+
+	.mobile-order-header .mobile-clear-button {
+		flex-shrink: 0;
+		align-self: flex-start;
+	}
+
+	.mobile-clear-button:hover,
+	.mobile-clear-button:focus-visible {
+		border-color: var(--color-primary);
+		background-color: color-mix(in srgb, var(--color-primary) 88%, black);
+		color: var(--color-primary-content);
+	}
+
+	.history-table-shell {
+		overflow: visible;
+	}
+
+	.history-table {
+		display: block;
+		width: 100%;
+	}
+
+	.history-table thead {
+		display: none;
+	}
+
+	.history-table tbody {
+		display: grid;
+		gap: 0.75rem;
+		padding: 0.75rem;
+	}
+
+	.history-table .history-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.7rem;
+		padding: 1rem;
+		border: 1px solid var(--color-base-300);
+		border-radius: 1rem;
+		background: var(--color-base-100);
+	}
+
+	.history-table .history-row td {
+		display: grid;
+		grid-template-columns: minmax(5.5rem, 34%) minmax(0, 1fr);
+		align-items: baseline;
+		column-gap: 0.75rem;
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		white-space: normal;
+	}
+
+	.history-table .history-row td::before {
+		margin: 0;
+		color: color-mix(in srgb, var(--color-base-content) 55%, transparent);
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		content: attr(data-label);
+	}
+
+	.history-table .history-row td:first-child {
+		font-size: 1rem;
+	}
+
+	.history-table .history-row td:last-child {
+		display: block;
+		padding-top: 0.65rem;
+		border-top: 1px solid var(--color-base-300);
+	}
+
+	.history-table .history-row td:last-child::before {
+		display: block;
+		margin-bottom: 0.5rem;
+	}
+
+	.history-actions {
+		width: 100%;
+	}
+
+	.history-actions .btn {
+		flex: 1;
+		min-width: 0;
+	}
+}
+
 :root,
 :root[data-theme="brioches-light"] {
 	--color-primary: #dc2626;
